@@ -19,6 +19,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
   // key: tanggal (1-31) -> data
   Map<int, Map<String, dynamic>> _dataAbsensiPerTanggal = {};
   Map<int, Map<String, dynamic>> _dataIzinPerTanggal = {};
+  Map<int, String> _dataHariLiburPerTanggal = {}; // tanggal -> keterangan
   List<Map<String, dynamic>> _aktivitasTerbaru = [];
 
   static const namaBulan = [
@@ -54,6 +55,18 @@ class _RiwayatTabState extends State<RiwayatTab> {
           .gte('tanggal_mulai', awal)
           .lte('tanggal_mulai', akhir);
 
+      final hariLibur = await supabase
+          .from('hari_libur')
+          .select()
+          .gte('tanggal', awal)
+          .lte('tanggal', akhir);
+
+      final mapHariLibur = <int, String>{};
+      for (final h in hariLibur) {
+        final tgl = DateTime.parse(h['tanggal'].toString()).day;
+        mapHariLibur[tgl] = h['keterangan'];
+      }
+
       final mapAbsensi = <int, Map<String, dynamic>>{};
       for (final a in absensi) {
         final tgl = DateTime.parse(a['tanggal'].toString()).day;
@@ -75,6 +88,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
       setState(() {
         _dataAbsensiPerTanggal = mapAbsensi;
         _dataIzinPerTanggal = mapIzin;
+        _dataHariLiburPerTanggal = mapHariLibur;
         _aktivitasTerbaru = gabungan;
       });
     } catch (e) {
@@ -153,7 +167,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
     for (int d = 1; d <= jumlahHariBulan; d++) {
       final tgl = DateTime(_tahun, _bulan, d);
       final isWeekend = tgl.weekday == DateTime.saturday || tgl.weekday == DateTime.sunday;
-      if (isWeekend) {
+      if (isWeekend || _dataHariLiburPerTanggal.containsKey(d)) {
         totalLibur++;
         continue;
       }
@@ -254,6 +268,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       final isWeekend = tglObj.weekday == DateTime.saturday || tglObj.weekday == DateTime.sunday;
                       final isHariIni = isBulanIni && tanggal == now.day;
                       final status = _statusTanggal(tanggal);
+                      final keteranganLibur = _dataHariLiburPerTanggal[tanggal];
 
                       if (isWeekend) {
                         return Container(
@@ -265,6 +280,23 @@ class _RiwayatTabState extends State<RiwayatTab> {
                           child: Text(
                             '$tanggal',
                             style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w700, fontSize: 13),
+                          ),
+                        );
+                      }
+
+                      if (keteranganLibur != null) {
+                        return Tooltip(
+                          message: keteranganLibur,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF3E8FF),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '$tanggal',
+                              style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w700, fontSize: 13),
+                            ),
                           ),
                         );
                       }
@@ -315,6 +347,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                         _legendaItem(AppColors.tertiaryContainer, 'Hadir'),
                         _legendaItem(const Color(0xFFB06000), 'Terlambat'),
                         _legendaItem(AppColors.primaryContainer, 'Izin/Sakit'),
+                        _legendaItem(const Color(0xFF7C3AED), 'Libur Nasional'),
                         Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: AppColors.error, fontSize: 11)),
                       ],
                     ),

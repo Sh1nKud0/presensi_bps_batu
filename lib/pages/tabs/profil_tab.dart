@@ -4,6 +4,8 @@ import '../../theme/app_theme.dart';
 import '../login_page.dart';
 import '../izin_page.dart';
 import '../admin_dashboard_page.dart';
+import 'edit_profil_page.dart';
+import 'ganti_password_page.dart';
 
 class ProfilTab extends StatefulWidget {
   const ProfilTab({super.key});
@@ -165,8 +167,23 @@ class _ProfilTabState extends State<ProfilTab> {
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AdminDashboardPage())),
                   ),
                 _menuHeader('PENGATURAN AKUN'),
-                _menuItem(icon: Icons.edit, label: 'Edit Profil', onTap: () {}),
-                //_menuItem(icon: Icons.lock, label: 'Keamanan', onTap: () {}),
+                _menuItem(
+                  icon: Icons.edit,
+                  label: 'Edit Profil',
+                  onTap: () async {
+                    final berubah = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(builder: (context) => const EditProfilPage()),
+                    );
+                    if (berubah == true) _muatProfil();
+                  },
+                ),
+                _menuItem(
+                  icon: Icons.lock,
+                  label: 'Keamanan',
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const GantiPasswordPage()),
+                  ),
+                ),
                 _menuItem(icon: Icons.info, label: 'Tentang Aplikasi', onTap: () {
                   showAboutDialog(
                     context: context,

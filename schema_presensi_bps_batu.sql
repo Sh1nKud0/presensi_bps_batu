@@ -140,3 +140,30 @@ $$ language plpgsql security definer;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+-- ============================================
+-- TABEL HARI LIBUR
+-- ============================================
+create table hari_libur (
+  id uuid default gen_random_uuid() primary key,
+  tanggal date not null unique,
+  keterangan text not null,
+  dibuat_oleh uuid references profiles(id),
+  created_at timestamp with time zone default now()
+);
+
+alter table hari_libur enable row level security;
+
+-- Semua user (termasuk peserta) boleh lihat daftar hari libur
+create policy "Semua user dapat melihat hari libur"
+  on hari_libur for select
+  using (true);
+
+-- Hanya admin yang boleh tambah/hapus hari libur
+create policy "Admin dapat menambah hari libur"
+  on hari_libur for insert
+  with check (public.is_admin());
+
+create policy "Admin dapat menghapus hari libur"
+  on hari_libur for delete
+  using (public.is_admin());

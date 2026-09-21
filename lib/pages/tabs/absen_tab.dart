@@ -23,12 +23,40 @@ class _AbsenTabState extends State<AbsenTab> {
   Position? _currentPosition;
   double? _jarakKeKantor;
   Map<String, dynamic>? _absensiHariIni;
+  String? _keteranganLibur; // null kalau bukan hari libur
 
   @override
   void initState() {
     super.initState();
+    _cekHariLibur();
     _cekAbsensiHariIni();
     _ambilLokasi();
+  }
+
+  Future<void> _cekHariLibur() async {
+    final now = DateTime.now();
+
+    // Cek weekend otomatis
+    if (now.weekday == DateTime.saturday || now.weekday == DateTime.sunday) {
+      setState(() => _keteranganLibur = now.weekday == DateTime.saturday ? 'Hari Sabtu (Libur)' : 'Hari Minggu (Libur)');
+      return;
+    }
+
+    // Cek hari libur yang diinput admin
+    try {
+      final today = now.toIso8601String().substring(0, 10);
+      final response = await supabase
+          .from('hari_libur')
+          .select()
+          .eq('tanggal', today)
+          .maybeSingle();
+
+      if (response != null && mounted) {
+        setState(() => _keteranganLibur = response['keterangan']);
+      }
+    } catch (e) {
+      debugPrint('Gagal cek hari libur: $e');
+    }
   }
 
   Future<void> _cekAbsensiHariIni() async {
@@ -99,6 +127,13 @@ class _AbsenTabState extends State<AbsenTab> {
   }
 
   Future<void> _kirimAbsensi() async {
+    if (_keteranganLibur != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hari ini adalah hari libur, presensi tidak diperlukan.')),
+      );
+      return;
+    }
+
     if (!_lokasiDiambil || _currentPosition == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Lokasi belum siap, coba lagi sebentar.')),
@@ -344,8 +379,37 @@ class _AbsenTabState extends State<AbsenTab> {
           ),
           const SizedBox(height: 24),
 
-          // Info status hari ini
-          if (selesai)
+          // Banner hari libur - blokir presensi
+          if (_keteranganLibur != null)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF3E8FF),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.beach_access, color: Color(0xFF7C3AED)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Hari Libur: $_keteranganLibur',
+                          style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w700, fontSize: 13),
+                        ),
+                        const Text(
+                          'Presensi tidak diperlukan hari ini.',
+                          style: TextStyle(color: Color(0xFF7C3AED), fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (selesai)
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(

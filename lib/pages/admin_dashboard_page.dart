@@ -15,18 +15,21 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   bool _loadingHariIni = true;
   bool _loadingRekap = true;
   bool _loadingIzin = true;
+  bool _loadingLibur = true;
   List<Map<String, dynamic>> _semuaPeserta = [];
   Map<String, Map<String, dynamic>> _absensiHariIniMap = {};
   List<Map<String, dynamic>> _rekapSemua = [];
   List<Map<String, dynamic>> _izinMenunggu = [];
+  List<Map<String, dynamic>> _daftarHariLibur = [];
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _ambilDataHariIni();
     _ambilRekapSemua();
     _ambilIzinMenunggu();
+    _ambilHariLibur();
   }
 
   @override
@@ -138,6 +141,117 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     }
   }
 
+  Future<void> _ambilHariLibur() async {
+    setState(() => _loadingLibur = true);
+    try {
+      final response = await supabase
+          .from('hari_libur')
+          .select()
+          .gte('tanggal', DateTime.now().toIso8601String().substring(0, 10))
+          .order('tanggal');
+
+      setState(() => _daftarHariLibur = List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat hari libur: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loadingLibur = false);
+    }
+  }
+
+  Future<void> _tambahHariLibur(DateTime tanggal, String keterangan) async {
+    try {
+      await supabase.from('hari_libur').insert({
+        'tanggal': tanggal.toIso8601String().substring(0, 10),
+        'keterangan': keterangan,
+        'dibuat_oleh': supabase.auth.currentUser!.id,
+      });
+      await _ambilHariLibur();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Hari libur ditambahkan'), backgroundColor: Colors.green),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menambah: $e')),
+      );
+    }
+  }
+
+  Future<void> _hapusHariLibur(String id) async {
+    try {
+      await supabase.from('hari_libur').delete().eq('id', id);
+      await _ambilHariLibur();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menghapus: $e')),
+      );
+    }
+  }
+
+  Future<void> _dialogTambahLibur() async {
+    DateTime? tanggalDipilih;
+    final keteranganController = TextEditingController();
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Tambah Hari Libur'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_today, size: 16),
+                label: Text(
+                  tanggalDipilih == null
+                      ? 'Pilih Tanggal'
+                      : '${tanggalDipilih!.day}/${tanggalDipilih!.month}/${tanggalDipilih!.year}',
+                ),
+                onPressed: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: DateTime.now(),
+                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                    lastDate: DateTime.now().add(const Duration(days: 365)),
+                  );
+                  if (picked != null) setDialogState(() => tanggalDipilih = picked);
+                },
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: keteranganController,
+                decoration: const InputDecoration(
+                  labelText: 'Keterangan',
+                  hintText: 'misal: Hari Kemerdekaan RI',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            ElevatedButton(
+              onPressed: () {
+                if (tanggalDipilih != null && keteranganController.text.isNotEmpty) {
+                  Navigator.pop(context);
+                  _tambahHariLibur(tanggalDipilih!, keteranganController.text.trim());
+                }
+              },
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatJam(dynamic value) {
     if (value == null) return '-';
     final dt = DateTime.parse(value.toString()).toLocal();
@@ -151,10 +265,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         title: const Text('Dashboard Admin'),
         bottom: TabBar(
           controller: _tabController,
+          isScrollable: true,
           tabs: const [
             Tab(text: 'Hari Ini'),
             Tab(text: 'Rekap Semua'),
             Tab(text: 'Izin'),
+            Tab(text: 'Hari Libur'),
           ],
         ),
       ),
@@ -164,6 +280,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           _buildTabHariIni(),
           _buildTabRekap(),
           _buildTabIzin(),
+          _buildTabHariLibur(),
         ],
       ),
     );
@@ -299,6 +416,54 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           );
         },
       ),
+    );
+  }
+
+  Widget _buildTabHariLibur() {
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _dialogTambahLibur,
+        icon: const Icon(Icons.add),
+        label: const Text('Tambah'),
+      ),
+      body: _loadingLibur
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _ambilHariLibur,
+              child: _daftarHariLibur.isEmpty
+                  ? ListView(
+                      children: const [
+                        SizedBox(height: 48),
+                        Center(child: Text('Belum ada hari libur terjadwal')),
+                      ],
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                      itemCount: _daftarHariLibur.length,
+                      itemBuilder: (context, index) {
+                        final item = _daftarHariLibur[index];
+                        final tanggal = DateTime.parse(item['tanggal'].toString());
+                        const namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+                        const namaBulan = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: const CircleAvatar(child: Icon(Icons.event_busy)),
+                            title: Text(item['keterangan'] ?? '-'),
+                            subtitle: Text(
+                              '${namaHari[tanggal.weekday - 1]}, ${tanggal.day} ${namaBulan[tanggal.month]} ${tanggal.year}',
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              onPressed: () => _hapusHariLibur(item['id']),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
     );
   }
 }

@@ -9,7 +9,7 @@ class RiwayatTab extends StatefulWidget {
   State<RiwayatTab> createState() => _RiwayatTabState();
 }
 
-enum _StatusHari { hadir, terlambat, izin, sakit, tidakAda }
+enum _StatusHari { hadir, terlambat, izin, sakit, dinasLuar, tidakAda }
 
 class _RiwayatTabState extends State<RiwayatTab> {
   bool _loading = true;
@@ -115,6 +115,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
   _StatusHari _statusTanggal(int tanggal) {
     if (_dataAbsensiPerTanggal.containsKey(tanggal)) {
       final a = _dataAbsensiPerTanggal[tanggal]!;
+      if (a['status'] == 'dinas_luar') return _StatusHari.dinasLuar;
       if (a['jam_masuk'] != null) {
         final jamMasuk = DateTime.parse(a['jam_masuk'].toString()).toLocal();
         if (jamMasuk.hour > 7 || (jamMasuk.hour == 7 && jamMasuk.minute > 30)) {
@@ -139,6 +140,8 @@ class _RiwayatTabState extends State<RiwayatTab> {
       case _StatusHari.izin:
       case _StatusHari.sakit:
         return AppColors.primaryContainer;
+      case _StatusHari.dinasLuar:
+        return const Color(0xFF0891B2);
       case _StatusHari.tidakAda:
         return Colors.transparent;
     }
@@ -347,6 +350,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                         _legendaItem(AppColors.tertiaryContainer, 'Hadir'),
                         _legendaItem(const Color(0xFFB06000), 'Terlambat'),
                         _legendaItem(AppColors.primaryContainer, 'Izin/Sakit'),
+                        _legendaItem(const Color(0xFF0891B2), 'Dinas Luar'),
                         _legendaItem(const Color(0xFF7C3AED), 'Libur Nasional'),
                         Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: AppColors.error, fontSize: 11)),
                       ],
@@ -492,10 +496,11 @@ class _RiwayatTabState extends State<RiwayatTab> {
     final labelTanggal = '${namaHariPanjang[tglObj.weekday - 1]}, $tanggal ${namaBulan[_bulan]} $_tahun';
 
     if (tipe == 'absensi') {
+      final isDinasLuar = data['status'] == 'dinas_luar';
       final jamMasuk = data['jam_masuk'] != null ? DateTime.parse(data['jam_masuk'].toString()).toLocal() : null;
       bool terlambat = false;
       int menitTerlambat = 0;
-      if (jamMasuk != null) {
+      if (jamMasuk != null && !isDinasLuar) {
         final cutoff = DateTime(jamMasuk.year, jamMasuk.month, jamMasuk.day, 7, 30);
         if (jamMasuk.isAfter(cutoff)) {
           terlambat = true;
@@ -528,15 +533,27 @@ class _RiwayatTabState extends State<RiwayatTab> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: terlambat ? const Color(0xFFFCEFD8) : AppColors.hadirBg,
+                    color: isDinasLuar
+                        ? const Color(0xFFCFFAFE)
+                        : terlambat
+                            ? const Color(0xFFFCEFD8)
+                            : AppColors.hadirBg,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    terlambat ? 'Terlambat $menitTerlambat Mnt' : 'Tepat Waktu',
+                    isDinasLuar
+                        ? 'Dinas Luar'
+                        : terlambat
+                            ? 'Terlambat $menitTerlambat Mnt'
+                            : 'Tepat Waktu',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: terlambat ? const Color(0xFFB06000) : AppColors.hadirText,
+                      color: isDinasLuar
+                          ? const Color(0xFF0891B2)
+                          : terlambat
+                              ? const Color(0xFFB06000)
+                              : AppColors.hadirText,
                     ),
                   ),
                 ),

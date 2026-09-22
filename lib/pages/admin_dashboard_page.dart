@@ -22,14 +22,18 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   List<Map<String, dynamic>> _izinMenunggu = [];
   List<Map<String, dynamic>> _daftarHariLibur = [];
 
+  bool _loadingSusulan = true;
+  List<Map<String, dynamic>> _susulanMenunggu = [];
+
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(length: 5, vsync: this);
     _ambilDataHariIni();
     _ambilRekapSemua();
     _ambilIzinMenunggu();
     _ambilHariLibur();
+    _ambilSusulanMenunggu();
   }
 
   @override
@@ -252,6 +256,103 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
+  Future<void> _ambilSusulanMenunggu() async {
+    setState(() => _loadingSusulan = true);
+    try {
+      final response = await supabase
+          .from('absen_susulan')
+          .select('*, profiles!absen_susulan_user_id_fkey(nama_lengkap)')
+          .eq('status_persetujuan', 'menunggu')
+          .order('created_at', ascending: false);
+      setState(() => _susulanMenunggu = List<Map<String, dynamic>>.from(response));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memuat absen susulan: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingSusulan = false);
+    }
+  }
+
+  // Konversi tanggal + jam (string "HH:mm:ss") jadi DateTime UTC, mengikuti
+  // konvensi aplikasi: waktu presensi selalu disimpan dalam UTC.
+  DateTime _gabungTanggalJam(String tanggal, String jam) {
+    final t = DateTime.parse(tanggal);
+    final parts = jam.split(':');
+    final local = DateTime(t.year, t.month, t.day, int.parse(parts[0]), int.parse(parts[1]));
+    return local.toUtc();
+  }
+
+  Future<void> _prosesSusulan(Map<String, dynamic> item, bool disetujui) async {
+    try {
+      if (disetujui) {
+        final userId = item['user_id'] as String;
+        final tanggal = item['tanggal'].toString();
+        final jamMasukStr = item['jam_masuk_diajukan'] as String?;
+        final jamPulangStr = item['jam_pulang_diajukan'] as String?;
+        final jenisAlasan = item['jenis_alasan'] as String;
+
+        DateTime? jamMasukUtc = jamMasukStr != null ? _gabungTanggalJam(tanggal, jamMasukStr) : null;
+        DateTime? jamPulangUtc = jamPulangStr != null ? _gabungTanggalJam(tanggal, jamPulangStr) : null;
+
+        // Tentukan status: dinas luar override status apapun, selain itu
+        // hitung terlambat/hadir dari jam masuk yang diajukan (cutoff 07:30 lokal)
+        String? statusBaru;
+        if (jamMasukUtc != null) {
+          if (jenisAlasan == 'dinas_luar') {
+            statusBaru = 'dinas_luar';
+          } else {
+            final localMasuk = jamMasukUtc.toLocal();
+            final cutoff = DateTime(localMasuk.year, localMasuk.month, localMasuk.day, 7, 30);
+            statusBaru = localMasuk.isAfter(cutoff) ? 'terlambat' : 'hadir';
+          }
+        }
+
+        // Cek apakah sudah ada baris absensi hari itu (misal presensi GPS normal sudah tercatat)
+        final existing = await supabase
+            .from('absensi')
+            .select()
+            .eq('user_id', userId)
+            .eq('tanggal', tanggal)
+            .maybeSingle();
+
+        if (existing == null) {
+          await supabase.from('absensi').insert({
+            'user_id': userId,
+            'tanggal': tanggal,
+            if (jamMasukUtc != null) 'jam_masuk': jamMasukUtc.toIso8601String(),
+            if (jamPulangUtc != null) 'jam_pulang': jamPulangUtc.toIso8601String(),
+            'status': statusBaru ?? 'hadir',
+          });
+        } else {
+          await supabase.from('absensi').update({
+            if (jamMasukUtc != null) 'jam_masuk': jamMasukUtc.toIso8601String(),
+            if (jamPulangUtc != null) 'jam_pulang': jamPulangUtc.toIso8601String(),
+            if (statusBaru != null) 'status': statusBaru,
+          }).eq('id', existing['id']);
+        }
+      }
+
+      await supabase.from('absen_susulan').update({
+        'status_persetujuan': disetujui ? 'disetujui' : 'ditolak',
+        'disetujui_oleh': supabase.auth.currentUser!.id,
+      }).eq('id', item['id']);
+
+      await _ambilSusulanMenunggu();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(disetujui ? 'Absen susulan disetujui & data presensi diperbarui' : 'Absen susulan ditolak'),
+          backgroundColor: disetujui ? Colors.green : Colors.red,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memproses: $e')));
+    }
+  }
+
   String _formatJam(dynamic value) {
     if (value == null) return '-';
     final dt = DateTime.parse(value.toString()).toLocal();
@@ -271,6 +372,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             Tab(text: 'Rekap Semua'),
             Tab(text: 'Izin'),
             Tab(text: 'Hari Libur'),
+            Tab(text: 'Susulan'),
           ],
         ),
       ),
@@ -281,6 +383,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           _buildTabRekap(),
           _buildTabIzin(),
           _buildTabHariLibur(),
+          _buildTabSusulan(),
         ],
       ),
     );
@@ -464,6 +567,75 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       },
                     ),
             ),
+    );
+  }
+
+  Widget _buildTabSusulan() {
+    if (_loadingSusulan) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    if (_susulanMenunggu.isEmpty) {
+      return const Center(child: Text('Tidak ada pengajuan absen susulan yang menunggu'));
+    }
+
+    return RefreshIndicator(
+      onRefresh: _ambilSusulanMenunggu,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: _susulanMenunggu.length,
+        itemBuilder: (context, index) {
+          final item = _susulanMenunggu[index];
+          final namaPeserta = item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
+          const labelAlasan = {
+            'dinas_luar': 'Dinas Luar',
+            'lupa_absen': 'Lupa Absen',
+            'gps_error': 'GPS / Lokasi Error',
+            'lainnya': 'Lainnya',
+          };
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 12),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(namaPeserta, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 4),
+                  Text('${item['tanggal']} • ${labelAlasan[item['jenis_alasan']] ?? '-'}'),
+                  const SizedBox(height: 4),
+                  if (item['jam_masuk_diajukan'] != null)
+                    Text('Jam masuk diajukan: ${item['jam_masuk_diajukan'].toString().substring(0, 5)}'),
+                  if (item['jam_pulang_diajukan'] != null)
+                    Text('Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}'),
+                  const SizedBox(height: 4),
+                  Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => _prosesSusulan(item, false),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                          child: const Text('Tolak'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => _prosesSusulan(item, true),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                          child: const Text('Setujui'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
 }

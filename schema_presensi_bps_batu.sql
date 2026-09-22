@@ -167,3 +167,45 @@ create policy "Admin dapat menambah hari libur"
 create policy "Admin dapat menghapus hari libur"
   on hari_libur for delete
   using (public.is_admin());
+
+-- ============================================
+-- TAMBAH STATUS BARU: dinas_luar
+-- ============================================
+alter table absensi drop constraint if exists absensi_status_check;
+alter table absensi add constraint absensi_status_check
+  check (status in ('hadir', 'terlambat', 'izin', 'sakit', 'alpha', 'dinas_luar'));
+
+-- ============================================
+-- TABEL ABSEN SUSULAN
+-- ============================================
+create table absen_susulan (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references profiles(id) on delete cascade not null,
+  tanggal date not null,
+  jam_masuk_diajukan time,   -- nullable, isi kalau mau koreksi/tambah jam masuk
+  jam_pulang_diajukan time,  -- nullable, isi kalau mau koreksi/tambah jam pulang
+  jenis_alasan text not null check (jenis_alasan in ('dinas_luar', 'lupa_absen', 'gps_error', 'lainnya')),
+  keterangan text not null,
+  bukti_url text,
+  status_persetujuan text not null default 'menunggu' check (status_persetujuan in ('menunggu', 'disetujui', 'ditolak')),
+  disetujui_oleh uuid references profiles(id),
+  created_at timestamp with time zone default now()
+);
+
+alter table absen_susulan enable row level security;
+
+create policy "User dapat melihat absen susulan sendiri"
+  on absen_susulan for select
+  using (auth.uid() = user_id);
+
+create policy "User dapat mengajukan absen susulan sendiri"
+  on absen_susulan for insert
+  with check (auth.uid() = user_id);
+
+create policy "Admin dapat melihat semua absen susulan"
+  on absen_susulan for select
+  using (public.is_admin());
+
+create policy "Admin dapat update absen susulan"
+  on absen_susulan for update
+  using (public.is_admin());

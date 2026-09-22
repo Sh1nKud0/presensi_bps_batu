@@ -3,6 +3,7 @@ import '../../main.dart';
 import '../../theme/app_theme.dart';
 import '../login_page.dart';
 import '../izin_page.dart';
+import 'absen_susulan_page.dart';
 import '../admin_dashboard_page.dart';
 import 'edit_profil_page.dart';
 import 'ganti_password_page.dart';
@@ -159,6 +160,11 @@ class _ProfilTabState extends State<ProfilTab> {
                   icon: Icons.event_busy,
                   label: 'Izin / Sakit',
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IzinPage())),
+                ),
+                _menuItem(
+                  icon: Icons.history_toggle_off,
+                  label: 'Absen Susulan',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AbsenSusulanPage())),
                 ),
                 if (_isAdmin)
                   _menuItem(

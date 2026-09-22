@@ -209,3 +209,16 @@ create policy "Admin dapat melihat semua absen susulan"
 create policy "Admin dapat update absen susulan"
   on absen_susulan for update
   using (public.is_admin());
+
+-- ============================================
+-- FIX: Admin perlu bisa insert/update absensi PESERTA LAIN
+-- (dibutuhkan untuk approve Absen Susulan)
+-- ============================================
+
+create policy "Admin dapat insert absensi siapapun"
+  on absensi for insert
+  with check (public.is_admin());
+
+create policy "Admin dapat update absensi siapapun"
+  on absensi for update
+  using (public.is_admin());

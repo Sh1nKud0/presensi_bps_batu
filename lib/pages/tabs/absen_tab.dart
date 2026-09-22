@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -24,6 +25,8 @@ class _AbsenTabState extends State<AbsenTab> {
   double? _jarakKeKantor;
   Map<String, dynamic>? _absensiHariIni;
   String? _keteranganLibur; // null kalau bukan hari libur
+  String? _errorLokasi;
+  StreamSubscription<ServiceStatus>? _serviceStatusSub;
 
   @override
   void initState() {
@@ -31,6 +34,19 @@ class _AbsenTabState extends State<AbsenTab> {
     _cekHariLibur();
     _cekAbsensiHariIni();
     _ambilLokasi();
+
+    // Auto-retry begitu user menyalakan GPS, tanpa perlu keluar-masuk app
+    _serviceStatusSub = Geolocator.getServiceStatusStream().listen((status) {
+      if (status == ServiceStatus.enabled && _currentPosition == null) {
+        _ambilLokasi();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _serviceStatusSub?.cancel();
+    super.dispose();
   }
 
   Future<void> _cekHariLibur() async {
@@ -79,6 +95,7 @@ class _AbsenTabState extends State<AbsenTab> {
     setState(() {
       _isLoading = true;
       _statusText = 'Mengambil lokasi...';
+      _errorLokasi = null;
     });
 
     LocationPermission permission = await Geolocator.checkPermission();
@@ -89,6 +106,7 @@ class _AbsenTabState extends State<AbsenTab> {
       setState(() {
         _isLoading = false;
         _statusText = '';
+        _errorLokasi = 'Izin lokasi ditolak. Aktifkan izin lokasi di pengaturan HP.';
       });
       return;
     }
@@ -98,13 +116,34 @@ class _AbsenTabState extends State<AbsenTab> {
       setState(() {
         _isLoading = false;
         _statusText = '';
+        _errorLokasi = 'GPS/Lokasi tidak aktif. Nyalakan GPS di HP Anda — halaman ini otomatis lanjut begitu GPS aktif.';
       });
       return;
+    }
+
+    // Tampilkan lokasi terakhir yang diketahui dulu (instan), sambil menunggu fix baru yang akurat
+    try {
+      final lastKnown = await Geolocator.getLastKnownPosition();
+      if (lastKnown != null && mounted && _currentPosition == null) {
+        final jarakSementara = Geolocator.distanceBetween(
+          lastKnown.latitude, lastKnown.longitude, kLatitudeKantor, kLongitudeKantor,
+        );
+        setState(() {
+          _currentPosition = lastKnown;
+          _jarakKeKantor = jarakSementara;
+          _statusText = 'Menyempurnakan akurasi lokasi...';
+        });
+      }
+    } catch (_) {
+      // abaikan, lanjut coba getCurrentPosition
     }
 
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw TimeoutException('Waktu habis mencari lokasi'),
       );
       final jarak = Geolocator.distanceBetween(
         position.latitude, position.longitude, kLatitudeKantor, kLongitudeKantor,
@@ -116,6 +155,11 @@ class _AbsenTabState extends State<AbsenTab> {
       });
     } catch (e) {
       debugPrint('Gagal ambil lokasi: $e');
+      if (mounted && _currentPosition == null) {
+        setState(() {
+          _errorLokasi = 'Gagal mendapat lokasi akurat. Coba pastikan Anda di area terbuka (dekat jendela/luar ruangan), lalu coba lagi.';
+        });
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -378,6 +422,44 @@ class _AbsenTabState extends State<AbsenTab> {
             ),
           ),
           const SizedBox(height: 24),
+
+          // Banner error lokasi (GPS mati, izin ditolak, timeout, dll)
+          if (_errorLokasi != null)
+            Container(
+              padding: const EdgeInsets.all(16),
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: AppColors.errorContainer.withOpacity(0.5),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.location_off, color: AppColors.error, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _errorLokasi!,
+                          style: const TextStyle(color: AppColors.error, fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: _isLoading ? null : _ambilLokasi,
+                      icon: const Icon(Icons.refresh, size: 16),
+                      label: const Text('Coba Lagi'),
+                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // Banner hari libur - blokir presensi
           if (_keteranganLibur != null)

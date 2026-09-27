@@ -1,4 +1,10 @@
+import 'dart:io';
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:file_saver/file_saver.dart';
 import '../main.dart';
 
 class AdminDashboardPage extends StatefulWidget {
@@ -19,6 +25,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   List<Map<String, dynamic>> _semuaPeserta = [];
   Map<String, Map<String, dynamic>> _absensiHariIniMap = {};
   List<Map<String, dynamic>> _rekapSemua = [];
+  int _bulanRekap = DateTime.now().month;
+  int _tahunRekap = DateTime.now().year;
+  bool _sedangExport = false;
   List<Map<String, dynamic>> _izinMenunggu = [];
   List<Map<String, dynamic>> _daftarHariLibur = [];
 
@@ -81,12 +90,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   Future<void> _ambilRekapSemua() async {
     setState(() => _loadingRekap = true);
     try {
+      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
+      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
+
       // Join absensi dengan profiles untuk ambil nama peserta
       final response = await supabase
           .from('absensi')
           .select('*, profiles(nama_lengkap)')
-          .order('tanggal', ascending: false)
-          .limit(100);
+          .gte('tanggal', awal)
+          .lte('tanggal', akhir)
+          .order('tanggal', ascending: false);
 
       setState(() => _rekapSemua = List<Map<String, dynamic>>.from(response));
     } catch (e) {
@@ -353,6 +366,35 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     }
   }
 
+  void _lihatGambarPenuh(BuildContext context, String url) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          alignment: Alignment.topRight,
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: InteractiveViewer(
+                child: Image.network(url, fit: BoxFit.contain),
+              ),
+            ),
+            Container(
+              margin: const EdgeInsets.all(8),
+              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.pop(context),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatJam(dynamic value) {
     if (value == null) return '-';
     final dt = DateTime.parse(value.toString()).toLocal();
@@ -367,12 +409,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Hari Ini'),
             Tab(text: 'Rekap Semua'),
             Tab(text: 'Izin'),
-            Tab(text: 'Hari Libur'),
             Tab(text: 'Susulan'),
+            Tab(text: 'Hari Libur'),
           ],
         ),
       ),
@@ -382,8 +425,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           _buildTabHariIni(),
           _buildTabRekap(),
           _buildTabIzin(),
-          _buildTabHariLibur(),
           _buildTabSusulan(),
+          _buildTabHariLibur(),
         ],
       ),
     );
@@ -427,7 +470,296 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
+  String _namaBulan(int b) => const [
+        '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
+      ][b];
+
+  // Escape sel CSV: bungkus dengan kutip kalau ada koma/kutip/baris baru
+  String _csvCell(dynamic value) {
+    final s = (value ?? '').toString();
+    if (s.contains(',') || s.contains('"') || s.contains('\n')) {
+      return '"${s.replaceAll('"', '""')}"';
+    }
+    return s;
+  }
+
+  Future<void> _simpanDanBagikanCsv(String namaFile, List<List<dynamic>> baris) async {
+    final csvString = baris.map((row) => row.map(_csvCell).join(',')).join('\r\n');
+    final bytes = Uint8List.fromList(utf8.encode(csvString));
+    final namaTanpaExt = namaFile.replaceAll('.csv', '');
+
+    try {
+      // Buka dialog "Simpan Sebagai" bawaan Android - user pilih lokasi sendiri
+      // (Downloads, folder manapun), tidak perlu app pihak ketiga.
+      await FileSaver.instance.saveAs(
+        name: namaTanpaExt,
+        bytes: bytes,
+        fileExtension: 'csv',
+        mimeType: MimeType.csv,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$namaFile berhasil disimpan'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      // Fallback: kalau dialog simpan gagal/tidak didukung, pakai Share sebagai cadangan
+      debugPrint('saveAs gagal, fallback ke share: $e');
+      final dir = await getTemporaryDirectory();
+      final file = File('${dir.path}/$namaFile');
+      await file.writeAsBytes(bytes);
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: namaFile));
+    }
+  }
+
+  // File 1: Ringkasan jumlah hadir/terlambat/izin per peserta dalam 1 bulan
+  Future<void> _unduhRingkasanCsv() async {
+    setState(() => _sedangExport = true);
+    try {
+      final semuaPeserta = await supabase.from('profiles').select().eq('role', 'peserta').order('nama_lengkap');
+
+      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
+      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
+
+      final absensiBulan = await supabase
+          .from('absensi')
+          .select()
+          .gte('tanggal', awal)
+          .lte('tanggal', akhir);
+
+      final izinBulan = await supabase
+          .from('izin')
+          .select()
+          .eq('status_persetujuan', 'disetujui')
+          .gte('tanggal_mulai', awal)
+          .lte('tanggal_mulai', akhir);
+
+      final baris = <List<dynamic>>[
+        ['nama', 'hadir', 'terlambat', 'izin', 'dinas_luar', 'total'],
+      ];
+
+      for (final peserta in semuaPeserta) {
+        final userId = peserta['id'];
+        final absensiUser = (absensiBulan as List).where((a) => a['user_id'] == userId);
+        final izinUser = (izinBulan as List).where((i) => i['user_id'] == userId).length;
+
+        int hadir = 0, terlambat = 0, dinasLuar = 0;
+        for (final a in absensiUser) {
+          if (a['status'] == 'dinas_luar') {
+            dinasLuar++;
+          } else if (a['jam_masuk'] != null) {
+            hadir++;
+            final jm = DateTime.parse(a['jam_masuk'].toString()).toLocal();
+            if (jm.hour > 7 || (jm.hour == 7 && jm.minute > 30)) terlambat++;
+          }
+        }
+
+        final total = hadir + izinUser + dinasLuar;
+        baris.add([peserta['nama_lengkap'], hadir, terlambat, izinUser, dinasLuar, total]);
+      }
+
+      await _simpanDanBagikanCsv(
+        'rekap_ringkasan_${_namaBulan(_bulanRekap)}_$_tahunRekap.csv',
+        baris,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal export: $e')));
+    } finally {
+      if (mounted) setState(() => _sedangExport = false);
+    }
+  }
+
+  // File 2: Detail harian per peserta - kolom berulang per tanggal (jam masuk / jam pulang / keterangan)
+  Future<void> _unduhDetailCsv() async {
+    setState(() => _sedangExport = true);
+    try {
+      final semuaPeserta = await supabase.from('profiles').select().eq('role', 'peserta').order('nama_lengkap');
+
+      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
+      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
+
+      final absensiBulan = await supabase
+          .from('absensi')
+          .select()
+          .gte('tanggal', awal)
+          .lte('tanggal', akhir);
+
+      final izinBulan = await supabase
+          .from('izin')
+          .select()
+          .eq('status_persetujuan', 'disetujui')
+          .gte('tanggal_mulai', awal)
+          .lte('tanggal_mulai', akhir);
+
+      // Kumpulkan semua tanggal yang punya data (biar CSV tidak terlalu lebar untuk tanggal kosong)
+      final Set<String> tanggalSet = {};
+      for (final a in (absensiBulan as List)) {
+        tanggalSet.add(a['tanggal'].toString());
+      }
+      for (final i in (izinBulan as List)) {
+        tanggalSet.add(i['tanggal_mulai'].toString());
+      }
+      final daftarTanggal = tanggalSet.toList()..sort();
+
+      if (daftarTanggal.isEmpty) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Belum ada data presensi di bulan ini untuk di-export')),
+        );
+        setState(() => _sedangExport = false);
+        return;
+      }
+
+      // Baris 1: header tanggal (diulang 3x per tanggal, meniru sel merge)
+      final headerTanggal = <dynamic>['', ''];
+      final headerSub = <dynamic>['no', 'nama'];
+      for (final tgl in daftarTanggal) {
+        headerTanggal.addAll([tgl, '', '']);
+        headerSub.addAll(['jam masuk', 'jam pulang', 'keterangan']);
+      }
+
+      final baris = <List<dynamic>>[headerTanggal, headerSub];
+
+      int no = 1;
+      for (final peserta in semuaPeserta) {
+        final userId = peserta['id'];
+        final row = <dynamic>[no, peserta['nama_lengkap']];
+
+        for (final tgl in daftarTanggal) {
+          final absensiHari = _cariBaris(
+            absensiBulan,
+            (a) => a['user_id'] == userId && a['tanggal'].toString() == tgl,
+          );
+          final izinHari = _cariBaris(
+            izinBulan,
+            (i) => i['user_id'] == userId && i['tanggal_mulai'].toString() == tgl,
+          );
+
+          if (absensiHari != null) {
+            final jm = _formatJam(absensiHari['jam_masuk']);
+            final jp = _formatJam(absensiHari['jam_pulang']);
+            String ket = 'Hadir';
+            if (absensiHari['status'] == 'dinas_luar') {
+              ket = 'Dinas Luar';
+            } else if (absensiHari['jam_masuk'] != null) {
+              final jamMasukDt = DateTime.parse(absensiHari['jam_masuk'].toString()).toLocal();
+              if (jamMasukDt.hour > 7 || (jamMasukDt.hour == 7 && jamMasukDt.minute > 30)) ket = 'Terlambat';
+            }
+            row.addAll([jm, jp, ket]);
+          } else if (izinHari != null) {
+            row.addAll(['-', '-', izinHari['jenis'] == 'sakit' ? 'Sakit' : 'Izin']);
+          } else {
+            row.addAll(['-', '-', '-']);
+          }
+        }
+
+        baris.add(row);
+        no++;
+      }
+
+      await _simpanDanBagikanCsv(
+        'rekap_detail_${_namaBulan(_bulanRekap)}_$_tahunRekap.csv',
+        baris,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal export: $e')));
+    } finally {
+      if (mounted) setState(() => _sedangExport = false);
+    }
+  }
+
+  // Helper pencarian manual - menghindari masalah tipe data null pada firstWhere()
+  Map<String, dynamic>? _cariBaris(List list, bool Function(Map<String, dynamic>) test) {
+    for (final item in list) {
+      final map = item as Map<String, dynamic>;
+      if (test(map)) return map;
+    }
+    return null;
+  }
+
   Widget _buildTabRekap() {
+    return Column(
+      children: [
+        // Filter bulan + tombol export
+        Container(
+          padding: const EdgeInsets.all(12),
+          margin: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _bulanRekap,
+                      decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Bulan'),
+                      items: List.generate(12, (i) => i + 1)
+                          .map((b) => DropdownMenuItem(value: b, child: Text(_namaBulan(b))))
+                          .toList(),
+                      onChanged: (v) {
+                        setState(() => _bulanRekap = v!);
+                        _ambilRekapSemua();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: DropdownButtonFormField<int>(
+                      initialValue: _tahunRekap,
+                      decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Tahun'),
+                      items: List.generate(
+                        DateTime.now().year - 2024 + 2, // 2024 s/d (tahun sekarang + 1), otomatis nambah tiap tahun
+                        (i) => 2024 + i,
+                      )
+                          .map((t) => DropdownMenuItem(value: t, child: Text('$t')))
+                          .toList(),
+                      onChanged: (v) {
+                        setState(() => _tahunRekap = v!);
+                        _ambilRekapSemua();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _sedangExport ? null : _unduhRingkasanCsv,
+                      icon: const Icon(Icons.download, size: 16),
+                      label: const Text('Ringkasan CSV'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: _sedangExport ? null : _unduhDetailCsv,
+                      icon: const Icon(Icons.download, size: 16),
+                      label: const Text('Detail CSV'),
+                    ),
+                  ),
+                ],
+              ),
+              if (_sedangExport) ...[
+                const SizedBox(height: 8),
+                const LinearProgressIndicator(),
+              ],
+            ],
+          ),
+        ),
+        Expanded(child: _buildRekapList()),
+      ],
+    );
+  }
+
+  Widget _buildRekapList() {
     if (_loadingRekap) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -493,6 +825,34 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                   Text('${(item['jenis'] as String).toUpperCase()} — ${item['tanggal_mulai']} s/d ${item['tanggal_selesai']}'),
                   const SizedBox(height: 4),
                   Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
+                  if (item['bukti_url'] != null) ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => _lihatGambarPenuh(context, item['bukti_url']),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          item['bukti_url'],
+                          height: 140,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              height: 140,
+                              color: Colors.grey.shade200,
+                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 140,
+                            color: Colors.grey.shade200,
+                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -610,6 +970,34 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                     Text('Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}'),
                   const SizedBox(height: 4),
                   Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
+                  if (item['bukti_url'] != null) ...[
+                    const SizedBox(height: 12),
+                    GestureDetector(
+                      onTap: () => _lihatGambarPenuh(context, item['bukti_url']),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.network(
+                          item['bukti_url'],
+                          height: 140,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return Container(
+                              height: 140,
+                              color: Colors.grey.shade200,
+                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            );
+                          },
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            height: 140,
+                            color: Colors.grey.shade200,
+                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 12),
                   Row(
                     children: [

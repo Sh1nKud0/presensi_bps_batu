@@ -382,9 +382,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),
-              if (!_loading && _aktivitasTerbaru.isNotEmpty)
-                Text('${_aktivitasTerbaru.length} entri', style: AppText.labelMd.copyWith(fontSize: 11)),
+              Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),             
             ],
           ),
           const SizedBox(height: 8),

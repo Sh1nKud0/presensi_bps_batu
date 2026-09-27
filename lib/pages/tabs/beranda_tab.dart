@@ -74,19 +74,46 @@ class _BerandaTabState extends State<BerandaTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          // Header sapaan
-          RichText(
-            text: TextSpan(
-              style: AppText.headlineMdMobile,
-              children: [
-                const TextSpan(text: 'Halo, '),
-                TextSpan(
-                  text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+          // Header sapaan + logo BPS
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Logo BPS - kalau asset belum ditambahkan, otomatis fallback ke ikon placeholder
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/logo_bps.png',
+                  height: 40,
+                  width: 40,
+                  fit: BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    height: 40,
+                    width: 40,
+                    decoration: BoxDecoration(
+                      color: AppColors.secondaryContainer,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.account_balance, color: AppColors.primary, size: 22),
+                  ),
                 ),
-                const TextSpan(text: ' 👋'),
-              ],
-            ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: RichText(
+                  text: TextSpan(
+                    style: AppText.headlineMdMobile,
+                    children: [
+                      const TextSpan(text: 'Halo, '),
+                      TextSpan(
+                        text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
+                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                      ),
+                      const TextSpan(text: ' 👋'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           Text('Siap untuk mulai berkarya hari ini?', style: AppText.bodyMd),
@@ -144,7 +171,7 @@ class _BerandaTabState extends State<BerandaTab> {
                         icon: jamKerjaPenuh ? Icons.flag_circle : Icons.schedule,
                         iconColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
                         value: '${durasi.inHours}j ${durasi.inMinutes % 60}m',
-                        label: jamKerjaPenuh ? 'Durasi Terpenuhi' : 'Kerja',
+                        label: jamKerjaPenuh ? 'Kerja • 8j+' : 'Kerja',
                         valueColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
                       ),
                     ),

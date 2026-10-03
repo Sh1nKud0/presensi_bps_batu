@@ -15,6 +15,13 @@ class _RiwayatTabState extends State<RiwayatTab> {
   bool _loading = true;
   int _bulan = DateTime.now().month;
   int _tahun = DateTime.now().year;
+  final ScrollController _aktivitasScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _aktivitasScrollController.dispose();
+    super.dispose();
+  }
 
   // key: tanggal (1-31) -> data
   Map<int, Map<String, dynamic>> _dataAbsensiPerTanggal = {};
@@ -139,7 +146,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
         return const Color(0xFFB06000);
       case _StatusHari.izin:
       case _StatusHari.sakit:
-        return AppColors.primaryContainer;
+        return const Color(0xFFDB2777);
       case _StatusHari.dinasLuar:
         return const Color(0xFF0891B2);
       case _StatusHari.tidakAda:
@@ -349,7 +356,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       children: [
                         _legendaItem(AppColors.tertiaryContainer, 'Hadir'),
                         _legendaItem(const Color(0xFFB06000), 'Terlambat'),
-                        _legendaItem(AppColors.primaryContainer, 'Izin/Sakit'),
+                        _legendaItem(const Color(0xFFDB2777), 'Izin/Sakit'),
                         _legendaItem(const Color(0xFF0891B2), 'Dinas Luar'),
                         _legendaItem(const Color(0xFF7C3AED), 'Libur Nasional'),
                         Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: AppColors.error, fontSize: 11)),
@@ -382,7 +389,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),             
+              Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),
+              if (!_loading && _aktivitasTerbaru.isNotEmpty)
+                Text('${_aktivitasTerbaru.length} entri', style: AppText.labelMd.copyWith(fontSize: 11)),
             ],
           ),
           const SizedBox(height: 8),
@@ -404,10 +413,16 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       padding: const EdgeInsets.symmetric(vertical: 24),
                       child: Text('Belum ada aktivitas di bulan ini', style: AppText.bodyMd, textAlign: TextAlign.center),
                     )
-                  : ListView.builder(
-                      shrinkWrap: true,
-                      itemCount: _aktivitasTerbaru.length,
-                      itemBuilder: (context, index) => _kartuAktivitas(_aktivitasTerbaru[index]),
+                  : Scrollbar(
+                      controller: _aktivitasScrollController,
+                      thumbVisibility: true,
+                      radius: const Radius.circular(8),
+                      child: ListView.builder(
+                        controller: _aktivitasScrollController,
+                        shrinkWrap: true,
+                        itemCount: _aktivitasTerbaru.length,
+                        itemBuilder: (context, index) => _kartuAktivitas(_aktivitasTerbaru[index]),
+                      ),
                     ),
             ),
 
@@ -607,7 +622,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                 Container(
                   width: 32, height: 32,
                   decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
-                  child: Icon(Icons.event_note, size: 16, color: AppColors.primaryContainer),
+                  child: Icon(Icons.event_note, size: 16, color: Color(0xFFDB2777)),
                 ),
                 const SizedBox(width: 8),
                 Expanded(

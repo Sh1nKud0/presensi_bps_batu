@@ -14,6 +14,7 @@ class _BerandaTabState extends State<BerandaTab> {
   bool _loading = true;
   Map<String, dynamic>? _absensiHariIni;
   String _namaUser = '';
+  bool _hariLibur = false;
 
   @override
   void initState() {
@@ -36,9 +37,18 @@ class _BerandaTabState extends State<BerandaTab> {
           .eq('tanggal', today)
           .maybeSingle();
 
+      // Cek apakah hari ini libur (weekend atau hari libur admin) - supaya reminder tidak muncul
+      final now = DateTime.now();
+      bool hariLibur = now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
+      if (!hariLibur) {
+        final libur = await supabase.from('hari_libur').select().eq('tanggal', today).maybeSingle();
+        hariLibur = libur != null;
+      }
+
       setState(() {
         _namaUser = profile['nama_lengkap'] ?? 'Peserta';
         _absensiHariIni = absensiHariIni;
+        _hariLibur = hariLibur;
       });
     } catch (e) {
       debugPrint('Gagal muat data beranda: $e');
@@ -200,6 +210,44 @@ class _BerandaTabState extends State<BerandaTab> {
               ),
             ),
           ),
+
+          // Reminder: belum absen masuk, sudah lewat jam 08:00, dan bukan hari libur
+          if (!_loading && !sudahMasuk && !_hariLibur && DateTime.now().hour >= 8) ...[
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppColors.errorContainer.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.notification_important, color: AppColors.error, size: 22),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Anda belum absen hari ini!',
+                          style: AppText.bodyMd.copyWith(
+                            color: AppColors.onErrorContainer,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Segera lakukan presensi. Jika ada kendala (dinas luar/GPS error), ajukan Absen Susulan di menu Profil.',
+                          style: AppText.bodyMd.copyWith(color: AppColors.onErrorContainer, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
 
           if (jamKerjaPenuh) ...[
             const SizedBox(height: 16),

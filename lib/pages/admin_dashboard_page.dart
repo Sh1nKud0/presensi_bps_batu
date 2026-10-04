@@ -30,6 +30,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   bool _sedangExport = false;
   List<Map<String, dynamic>> _izinMenunggu = [];
   List<Map<String, dynamic>> _daftarHariLibur = [];
+  int _tabIndexTerakhir = 0;
 
   bool _loadingSusulan = true;
   List<Map<String, dynamic>> _susulanMenunggu = [];
@@ -38,6 +39,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
+    _tabController.addListener(_saatTabBerubah);
     _ambilDataHariIni();
     _ambilRekapSemua();
     _ambilIzinMenunggu();
@@ -47,8 +49,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   @override
   void dispose() {
+    _tabController.removeListener(_saatTabBerubah);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _saatTabBerubah() {
+    final index = _tabController.index;
+    if (index == _tabIndexTerakhir) return;
+    _tabIndexTerakhir = index;
+    if (index == 4) _ambilHariLibur();
   }
 
   Future<void> _ambilDataHariIni() async {
@@ -164,7 +174,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       final response = await supabase
           .from('hari_libur')
           .select()
-          .gte('tanggal', DateTime.now().toIso8601String().substring(0, 10))
           .order('tanggal');
 
       setState(() => _daftarHariLibur = List<Map<String, dynamic>>.from(response));
@@ -312,8 +321,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         // hitung terlambat/hadir dari jam masuk yang diajukan (cutoff 07:30 lokal)
         String? statusBaru;
         if (jamMasukUtc != null) {
-          if (jenisAlasan == 'dinas_luar') {
-            statusBaru = 'dinas_luar';
+          if (jenisAlasan == 'dispensasi') {
+            statusBaru = 'dispensasi';
           } else {
             final localMasuk = jamMasukUtc.toLocal();
             final cutoff = DateTime(localMasuk.year, localMasuk.month, localMasuk.day, 7, 30);
@@ -412,9 +421,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Hari Ini'),
-            Tab(text: 'Rekap Semua'),
-            Tab(text: 'Izin'),
-            Tab(text: 'Susulan'),
+            Tab(text: 'Rekap'),
+            Tab(text: 'Approval Izin'),
+            Tab(text: 'Approval Susulan'),
             Tab(text: 'Hari Libur'),
           ],
         ),
@@ -508,7 +517,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
       // ===== SHEET 1: RINGKASAN =====
       final ringkasan = workbook['Ringkasan'];
-      const headerRingkasan = ['nama', 'hadir', 'terlambat', 'izin', 'dinas_luar', 'total'];
+      const headerRingkasan = ['nama', 'hadir', 'terlambat', 'izin', 'dispensasi', 'total'];
       for (int c = 0; c < headerRingkasan.length; c++) {
         final cell = ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
         cell.value = xls.TextCellValue(headerRingkasan[c]);
@@ -521,24 +530,24 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         final absensiUser = (absensiBulan as List).where((a) => a['user_id'] == userId);
         final izinUser = (izinBulan as List).where((i) => i['user_id'] == userId).length;
 
-        int hadir = 0, terlambat = 0, dinasLuar = 0;
+        int hadir = 0, terlambat = 0, dispensasi = 0;
         for (final a in absensiUser) {
-          if (a['status'] == 'dinas_luar') {
-            dinasLuar++;
+          if (a['status'] == 'dispensasi') {
+            dispensasi++;
           } else if (a['jam_masuk'] != null) {
             hadir++;
             final jm = DateTime.parse(a['jam_masuk'].toString()).toLocal();
             if (jm.hour > 7 || (jm.hour == 7 && jm.minute > 30)) terlambat++;
           }
         }
-        final total = hadir + izinUser + dinasLuar;
+        final total = hadir + izinUser + dispensasi;
 
         ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value =
             xls.TextCellValue(peserta['nama_lengkap'] ?? '-');
         ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = xls.IntCellValue(hadir);
         ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = xls.IntCellValue(terlambat);
         ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = xls.IntCellValue(izinUser);
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = xls.IntCellValue(dinasLuar);
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = xls.IntCellValue(dispensasi);
         ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = xls.IntCellValue(total);
         rowIdx++;
       }
@@ -597,8 +606,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
               jm = _formatJam(absensiHari['jam_masuk']);
               jp = _formatJam(absensiHari['jam_pulang']);
               ket = 'Hadir';
-              if (absensiHari['status'] == 'dinas_luar') {
-                ket = 'Dinas Luar';
+              if (absensiHari['status'] == 'dispensasi') {
+                ket = 'Dispensasi';
               } else if (absensiHari['jam_masuk'] != null) {
                 final jamMasukDt = DateTime.parse(absensiHari['jam_masuk'].toString()).toLocal();
                 if (jamMasukDt.hour > 7 || (jamMasukDt.hour == 7 && jamMasukDt.minute > 30)) ket = 'Terlambat';
@@ -703,7 +712,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                 child: OutlinedButton.icon(
                   onPressed: _sedangExport ? null : _unduhRekapXlsx,
                   icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Unduh Excel (XLSX) - Ringkasan & Detail'),
+                  label: const Text('Unduh Ringkasan & Detail'),
                 ),
               ),
               if (_sedangExport) ...[
@@ -715,6 +724,40 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         ),
         Expanded(child: _buildRekapList()),
       ],
+    );
+  }
+
+  // Skema warna sama dengan kalender di tab Riwayat peserta
+  Widget _badgeStatusRekap(Map<String, dynamic> item) {
+    String label;
+    Color bg, text;
+
+    if (item['status'] == 'dispensasi') {
+      label = 'DISPENSASI';
+      bg = const Color(0xFFCFFAFE);
+      text = const Color(0xFF0891B2);
+    } else if (item['jam_masuk'] != null) {
+      final jm = DateTime.parse(item['jam_masuk'].toString()).toLocal();
+      final terlambat = jm.hour > 7 || (jm.hour == 7 && jm.minute > 30);
+      if (terlambat) {
+        label = 'TERLAMBAT';
+        bg = const Color(0xFFFCEFD8);
+        text = const Color(0xFFB06000);
+      } else {
+        label = 'HADIR';
+        bg = const Color(0xFFE6F4EA);
+        text = const Color(0xFF137333);
+      }
+    } else {
+      label = '-';
+      bg = Colors.grey.shade200;
+      text = Colors.grey.shade700;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
+      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: text)),
     );
   }
 
@@ -743,10 +786,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
               subtitle: Text(
                 '${item['tanggal']}  |  Masuk: ${_formatJam(item['jam_masuk'])}  |  Pulang: ${_formatJam(item['jam_pulang'])}',
               ),
-              trailing: Text(
-                (item['status'] as String? ?? '-').toUpperCase(),
-                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
-              ),
+              trailing: _badgeStatusRekap(item),
             ),
           );
         },
@@ -906,7 +946,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           final item = _susulanMenunggu[index];
           final namaPeserta = item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
           const labelAlasan = {
-            'dinas_luar': 'Dinas Luar',
+            'dispensasi': 'Dispensasi',
             'lupa_absen': 'Lupa Absen',
             'gps_error': 'GPS / Lokasi Error',
             'lainnya': 'Lainnya',

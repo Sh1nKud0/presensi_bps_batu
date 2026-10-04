@@ -122,7 +122,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
   _StatusHari _statusTanggal(int tanggal) {
     if (_dataAbsensiPerTanggal.containsKey(tanggal)) {
       final a = _dataAbsensiPerTanggal[tanggal]!;
-      if (a['status'] == 'dinas_luar') return _StatusHari.dinasLuar;
+      if (a['status'] == 'dispensasi') return _StatusHari.dinasLuar;
       if (a['jam_masuk'] != null) {
         final jamMasuk = DateTime.parse(a['jam_masuk'].toString()).toLocal();
         if (jamMasuk.hour > 7 || (jamMasuk.hour == 7 && jamMasuk.minute > 30)) {
@@ -357,7 +357,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                         _legendaItem(AppColors.tertiaryContainer, 'Hadir'),
                         _legendaItem(const Color(0xFFB06000), 'Terlambat'),
                         _legendaItem(const Color(0xFFDB2777), 'Izin/Sakit'),
-                        _legendaItem(const Color(0xFF0891B2), 'Dinas Luar'),
+                        _legendaItem(const Color(0xFF0891B2), 'Dispensasi'),
                         _legendaItem(const Color(0xFF7C3AED), 'Libur Nasional'),
                         Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: AppColors.error, fontSize: 11)),
                       ],
@@ -509,7 +509,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
     final labelTanggal = '${namaHariPanjang[tglObj.weekday - 1]}, $tanggal ${namaBulan[_bulan]} $_tahun';
 
     if (tipe == 'absensi') {
-      final isDinasLuar = data['status'] == 'dinas_luar';
+      final isDinasLuar = data['status'] == 'dispensasi';
       final jamMasuk = data['jam_masuk'] != null ? DateTime.parse(data['jam_masuk'].toString()).toLocal() : null;
       bool terlambat = false;
       int menitTerlambat = 0;
@@ -555,7 +555,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                   ),
                   child: Text(
                     isDinasLuar
-                        ? 'Dinas Luar'
+                        ? 'Dispensasi'
                         : terlambat
                             ? 'Terlambat $menitTerlambat Mnt'
                             : 'Tepat Waktu',

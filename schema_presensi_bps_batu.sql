@@ -222,3 +222,22 @@ create policy "Admin dapat insert absensi siapapun"
 create policy "Admin dapat update absensi siapapun"
   on absensi for update
   using (public.is_admin());
+
+  -- ============================================
+-- RENAME: dinas_luar -> dispensasi
+-- (lebih cocok untuk konteks peserta magang)
+-- ============================================
+
+-- 1. Update data yang sudah ada dulu (sebelum constraint diganti)
+update absensi set status = 'dispensasi' where status = 'dinas_luar';
+update absen_susulan set jenis_alasan = 'dispensasi' where jenis_alasan = 'dinas_luar';
+
+-- 2. Update constraint tabel absensi
+alter table absensi drop constraint if exists absensi_status_check;
+alter table absensi add constraint absensi_status_check
+  check (status in ('hadir', 'terlambat', 'izin', 'sakit', 'alpha', 'dispensasi'));
+
+-- 3. Update constraint tabel absen_susulan
+alter table absen_susulan drop constraint if exists absen_susulan_jenis_alasan_check;
+alter table absen_susulan add constraint absen_susulan_jenis_alasan_check
+  check (jenis_alasan in ('dispensasi', 'lupa_absen', 'gps_error', 'lainnya'));

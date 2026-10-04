@@ -49,7 +49,7 @@ class _AbsenSusulanPageState extends State<AbsenSusulanPage> with SingleTickerPr
 }
 
 const Map<String, String> kLabelAlasan = {
-  'dinas_luar': 'Dinas Luar',
+  'dispensasi': 'Dispensasi',
   'lupa_absen': 'Lupa Absen',
   'gps_error': 'GPS / Lokasi Error',
   'lainnya': 'Lainnya',

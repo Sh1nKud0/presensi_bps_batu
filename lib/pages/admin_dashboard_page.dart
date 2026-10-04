@@ -1,10 +1,10 @@
 import 'dart:io';
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
+import 'package:excel_plus/excel_plus.dart' as xls;
 import '../main.dart';
 
 class AdminDashboardPage extends StatefulWidget {
@@ -475,46 +475,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
       ][b];
 
-  // Escape sel CSV: bungkus dengan kutip kalau ada koma/kutip/baris baru
-  String _csvCell(dynamic value) {
-    final s = (value ?? '').toString();
-    if (s.contains(',') || s.contains('"') || s.contains('\n')) {
-      return '"${s.replaceAll('"', '""')}"';
+  // Helper pencarian manual - menghindari masalah tipe data null pada firstWhere()
+  Map<String, dynamic>? _cariBaris(List list, bool Function(Map<String, dynamic>) test) {
+    for (final item in list) {
+      final map = item as Map<String, dynamic>;
+      if (test(map)) return map;
     }
-    return s;
+    return null;
   }
 
-  Future<void> _simpanDanBagikanCsv(String namaFile, List<List<dynamic>> baris) async {
-    final csvString = baris.map((row) => row.map(_csvCell).join(',')).join('\r\n');
-    final bytes = Uint8List.fromList(utf8.encode(csvString));
-    final namaTanpaExt = namaFile.replaceAll('.csv', '');
-
-    try {
-      // Buka dialog "Simpan Sebagai" bawaan Android - user pilih lokasi sendiri
-      // (Downloads, folder manapun), tidak perlu app pihak ketiga.
-      await FileSaver.instance.saveAs(
-        name: namaTanpaExt,
-        bytes: bytes,
-        fileExtension: 'csv',
-        mimeType: MimeType.csv,
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$namaFile berhasil disimpan'), backgroundColor: Colors.green),
-        );
-      }
-    } catch (e) {
-      // Fallback: kalau dialog simpan gagal/tidak didukung, pakai Share sebagai cadangan
-      debugPrint('saveAs gagal, fallback ke share: $e');
-      final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/$namaFile');
-      await file.writeAsBytes(bytes);
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: namaFile));
-    }
-  }
-
-  // File 1: Ringkasan jumlah hadir/terlambat/izin per peserta dalam 1 bulan
-  Future<void> _unduhRingkasanCsv() async {
+  // Export rekap sebagai 1 file Excel (XLSX) dengan 2 sheet:
+  // Sheet "Ringkasan" = jumlah hadir/terlambat/izin per peserta
+  // Sheet "Detail"    = rincian harian per peserta, header tanggal di-merge asli (bukan CSV)
+  Future<void> _unduhRekapXlsx() async {
     setState(() => _sedangExport = true);
     try {
       final semuaPeserta = await supabase.from('profiles').select().eq('role', 'peserta').order('nama_lengkap');
@@ -522,12 +495,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
       final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
 
-      final absensiBulan = await supabase
-          .from('absensi')
-          .select()
-          .gte('tanggal', awal)
-          .lte('tanggal', akhir);
-
+      final absensiBulan = await supabase.from('absensi').select().gte('tanggal', awal).lte('tanggal', akhir);
       final izinBulan = await supabase
           .from('izin')
           .select()
@@ -535,10 +503,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           .gte('tanggal_mulai', awal)
           .lte('tanggal_mulai', akhir);
 
-      final baris = <List<dynamic>>[
-        ['nama', 'hadir', 'terlambat', 'izin', 'dinas_luar', 'total'],
-      ];
+      final workbook = xls.Excel.createExcel();
+      workbook.rename('Sheet1', 'Ringkasan');
 
+      // ===== SHEET 1: RINGKASAN =====
+      final ringkasan = workbook['Ringkasan'];
+      const headerRingkasan = ['nama', 'hadir', 'terlambat', 'izin', 'dinas_luar', 'total'];
+      for (int c = 0; c < headerRingkasan.length; c++) {
+        final cell = ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
+        cell.value = xls.TextCellValue(headerRingkasan[c]);
+        cell.cellStyle = xls.CellStyle(bold: true);
+      }
+
+      int rowIdx = 1;
       for (final peserta in semuaPeserta) {
         final userId = peserta['id'];
         final absensiUser = (absensiBulan as List).where((a) => a['user_id'] == userId);
@@ -554,130 +531,123 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             if (jm.hour > 7 || (jm.hour == 7 && jm.minute > 30)) terlambat++;
           }
         }
-
         final total = hadir + izinUser + dinasLuar;
-        baris.add([peserta['nama_lengkap'], hadir, terlambat, izinUser, dinasLuar, total]);
+
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value =
+            xls.TextCellValue(peserta['nama_lengkap'] ?? '-');
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = xls.IntCellValue(hadir);
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = xls.IntCellValue(terlambat);
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = xls.IntCellValue(izinUser);
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = xls.IntCellValue(dinasLuar);
+        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = xls.IntCellValue(total);
+        rowIdx++;
       }
 
-      await _simpanDanBagikanCsv(
-        'rekap_ringkasan_${_namaBulan(_bulanRekap)}_$_tahunRekap.csv',
-        baris,
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal export: $e')));
-    } finally {
-      if (mounted) setState(() => _sedangExport = false);
-    }
-  }
+      // ===== SHEET 2: DETAIL (header tanggal di-merge beneran, bukan diulang seperti CSV) =====
+      final detail = workbook['Detail'];
 
-  // File 2: Detail harian per peserta - kolom berulang per tanggal (jam masuk / jam pulang / keterangan)
-  Future<void> _unduhDetailCsv() async {
-    setState(() => _sedangExport = true);
-    try {
-      final semuaPeserta = await supabase.from('profiles').select().eq('role', 'peserta').order('nama_lengkap');
-
-      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
-      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
-
-      final absensiBulan = await supabase
-          .from('absensi')
-          .select()
-          .gte('tanggal', awal)
-          .lte('tanggal', akhir);
-
-      final izinBulan = await supabase
-          .from('izin')
-          .select()
-          .eq('status_persetujuan', 'disetujui')
-          .gte('tanggal_mulai', awal)
-          .lte('tanggal_mulai', akhir);
-
-      // Kumpulkan semua tanggal yang punya data (biar CSV tidak terlalu lebar untuk tanggal kosong)
       final Set<String> tanggalSet = {};
-      for (final a in (absensiBulan as List)) {
+      for (final a in (absensiBulan)) {
         tanggalSet.add(a['tanggal'].toString());
       }
-      for (final i in (izinBulan as List)) {
+      for (final i in (izinBulan)) {
         tanggalSet.add(i['tanggal_mulai'].toString());
       }
       final daftarTanggal = tanggalSet.toList()..sort();
 
-      if (daftarTanggal.isEmpty) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Belum ada data presensi di bulan ini untuk di-export')),
-        );
-        setState(() => _sedangExport = false);
-        return;
-      }
-
-      // Baris 1: header tanggal (diulang 3x per tanggal, meniru sel merge)
-      final headerTanggal = <dynamic>['', ''];
-      final headerSub = <dynamic>['no', 'nama'];
-      for (final tgl in daftarTanggal) {
-        headerTanggal.addAll([tgl, '', '']);
-        headerSub.addAll(['jam masuk', 'jam pulang', 'keterangan']);
-      }
-
-      final baris = <List<dynamic>>[headerTanggal, headerSub];
-
-      int no = 1;
-      for (final peserta in semuaPeserta) {
-        final userId = peserta['id'];
-        final row = <dynamic>[no, peserta['nama_lengkap']];
-
-        for (final tgl in daftarTanggal) {
-          final absensiHari = _cariBaris(
-            absensiBulan,
-            (a) => a['user_id'] == userId && a['tanggal'].toString() == tgl,
+      if (daftarTanggal.isNotEmpty) {
+        for (int i = 0; i < daftarTanggal.length; i++) {
+          final startCol = 2 + (i * 3);
+          final cell = detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: startCol, rowIndex: 0));
+          cell.value = xls.TextCellValue(daftarTanggal[i]);
+          cell.cellStyle = xls.CellStyle(bold: true, horizontalAlign: xls.HorizontalAlign.Center);
+          detail.merge(
+            xls.CellIndex.indexByColumnRow(columnIndex: startCol, rowIndex: 0),
+            xls.CellIndex.indexByColumnRow(columnIndex: startCol + 2, rowIndex: 0),
           );
-          final izinHari = _cariBaris(
-            izinBulan,
-            (i) => i['user_id'] == userId && i['tanggal_mulai'].toString() == tgl,
-          );
-
-          if (absensiHari != null) {
-            final jm = _formatJam(absensiHari['jam_masuk']);
-            final jp = _formatJam(absensiHari['jam_pulang']);
-            String ket = 'Hadir';
-            if (absensiHari['status'] == 'dinas_luar') {
-              ket = 'Dinas Luar';
-            } else if (absensiHari['jam_masuk'] != null) {
-              final jamMasukDt = DateTime.parse(absensiHari['jam_masuk'].toString()).toLocal();
-              if (jamMasukDt.hour > 7 || (jamMasukDt.hour == 7 && jamMasukDt.minute > 30)) ket = 'Terlambat';
-            }
-            row.addAll([jm, jp, ket]);
-          } else if (izinHari != null) {
-            row.addAll(['-', '-', izinHari['jenis'] == 'sakit' ? 'Sakit' : 'Izin']);
-          } else {
-            row.addAll(['-', '-', '-']);
-          }
         }
 
-        baris.add(row);
-        no++;
+        final headerBaris2 = <String>['no', 'nama'];
+        for (int i = 0; i < daftarTanggal.length; i++) {
+          headerBaris2.addAll(['jam masuk', 'jam pulang', 'keterangan']);
+        }
+        for (int c = 0; c < headerBaris2.length; c++) {
+          final cell = detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 1));
+          cell.value = xls.TextCellValue(headerBaris2[c]);
+          cell.cellStyle = xls.CellStyle(bold: true);
+        }
+
+        int no = 1;
+        int baris = 2;
+        for (final peserta in semuaPeserta) {
+          final userId = peserta['id'];
+          detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: baris)).value = xls.IntCellValue(no);
+          detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: baris)).value =
+              xls.TextCellValue(peserta['nama_lengkap'] ?? '-');
+
+          for (int i = 0; i < daftarTanggal.length; i++) {
+            final tgl = daftarTanggal[i];
+            final col = 2 + (i * 3);
+
+            final absensiHari = _cariBaris(absensiBulan, (a) => a['user_id'] == userId && a['tanggal'].toString() == tgl);
+            final izinHari = _cariBaris(izinBulan, (i2) => i2['user_id'] == userId && i2['tanggal_mulai'].toString() == tgl);
+
+            String jm = '-', jp = '-', ket = '-';
+            if (absensiHari != null) {
+              jm = _formatJam(absensiHari['jam_masuk']);
+              jp = _formatJam(absensiHari['jam_pulang']);
+              ket = 'Hadir';
+              if (absensiHari['status'] == 'dinas_luar') {
+                ket = 'Dinas Luar';
+              } else if (absensiHari['jam_masuk'] != null) {
+                final jamMasukDt = DateTime.parse(absensiHari['jam_masuk'].toString()).toLocal();
+                if (jamMasukDt.hour > 7 || (jamMasukDt.hour == 7 && jamMasukDt.minute > 30)) ket = 'Terlambat';
+              }
+            } else if (izinHari != null) {
+              ket = izinHari['jenis'] == 'sakit' ? 'Sakit' : 'Izin';
+            }
+
+            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: baris)).value = xls.TextCellValue(jm);
+            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col + 1, rowIndex: baris)).value = xls.TextCellValue(jp);
+            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col + 2, rowIndex: baris)).value = xls.TextCellValue(ket);
+          }
+
+          no++;
+          baris++;
+        }
       }
 
-      await _simpanDanBagikanCsv(
-        'rekap_detail_${_namaBulan(_bulanRekap)}_$_tahunRekap.csv',
-        baris,
-      );
+      final fileBytes = workbook.save();
+      if (fileBytes == null) throw Exception('Gagal membuat file Excel');
+
+      final namaFile = 'rekap_presensi_${_namaBulan(_bulanRekap)}_$_tahunRekap';
+      final bytes = Uint8List.fromList(fileBytes);
+
+      try {
+        await FileSaver.instance.saveAs(
+          name: namaFile,
+          bytes: bytes,
+          fileExtension: 'xlsx',
+          mimeType: MimeType.microsoftExcel,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('File Excel berhasil disimpan'), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        debugPrint('saveAs gagal, fallback ke share: $e');
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/$namaFile.xlsx');
+        await file.writeAsBytes(bytes);
+        await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: namaFile));
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal export: $e')));
     } finally {
       if (mounted) setState(() => _sedangExport = false);
     }
-  }
-
-  // Helper pencarian manual - menghindari masalah tipe data null pada firstWhere()
-  Map<String, dynamic>? _cariBaris(List list, bool Function(Map<String, dynamic>) test) {
-    for (final item in list) {
-      final map = item as Map<String, dynamic>;
-      if (test(map)) return map;
-    }
-    return null;
   }
 
   Widget _buildTabRekap() {
@@ -728,24 +698,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                 ],
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _sedangExport ? null : _unduhRingkasanCsv,
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Ringkasan CSV'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _sedangExport ? null : _unduhDetailCsv,
-                      icon: const Icon(Icons.download, size: 16),
-                      label: const Text('Detail CSV'),
-                    ),
-                  ),
-                ],
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _sedangExport ? null : _unduhRekapXlsx,
+                  icon: const Icon(Icons.download, size: 16),
+                  label: const Text('Unduh Excel (XLSX) - Ringkasan & Detail'),
+                ),
               ),
               if (_sedangExport) ...[
                 const SizedBox(height: 8),

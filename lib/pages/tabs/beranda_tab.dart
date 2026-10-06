@@ -84,7 +84,7 @@ class _BerandaTabState extends State<BerandaTab> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          // Header sapaan + logo BPS
+          // Header nama aplikasi
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
@@ -109,21 +109,26 @@ class _BerandaTabState extends State<BerandaTab> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: RichText(
-                  text: TextSpan(
-                    style: AppText.headlineMdMobile,
-                    children: [
-                      const TextSpan(text: 'Halo, '),
-                      TextSpan(
-                        text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
-                        style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
-                      ),
-                      const TextSpan(text: ' 👋'),
-                    ],
-                  ),
+                child: Text(
+                  'Presensi Magang',
+                  style: AppText.headlineMdMobile.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 8),
+          RichText(
+            text: TextSpan(
+              style: AppText.bodyLg.copyWith(fontSize: 16),
+              children: [
+                const TextSpan(text: 'Halo, '),
+                TextSpan(
+                  text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                ),
+                const TextSpan(text: ' 👋'),
+              ],
+            ),
           ),
           const SizedBox(height: 4),
           Text('Siap untuk mulai berkarya hari ini?', style: AppText.bodyMd),

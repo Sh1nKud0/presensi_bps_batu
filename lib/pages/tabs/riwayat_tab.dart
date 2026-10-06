@@ -387,11 +387,8 @@ class _RiwayatTabState extends State<RiwayatTab> {
 
           // Aktivitas terbaru
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),
-              if (!_loading && _aktivitasTerbaru.isNotEmpty)
-                Text('${_aktivitasTerbaru.length} entri', style: AppText.labelMd.copyWith(fontSize: 11)),
             ],
           ),
           const SizedBox(height: 8),
@@ -510,6 +507,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
 
     if (tipe == 'absensi') {
       final isDinasLuar = data['status'] == 'dispensasi';
+      final belumAbsen = data['jam_pulang'] == null;
       final jamMasuk = data['jam_masuk'] != null ? DateTime.parse(data['jam_masuk'].toString()).toLocal() : null;
       bool terlambat = false;
       int menitTerlambat = 0;
@@ -541,32 +539,44 @@ class _RiwayatTabState extends State<RiwayatTab> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  child: Text(labelTanggal, style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(namaHariPanjang[tglObj.weekday - 1], style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                      Text('$tanggal ${namaBulan[_bulan]} $_tahun', style: AppText.labelMd.copyWith(fontSize: 11, color: AppColors.onSurfaceVariant)),
+                    ],
+                  ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isDinasLuar
-                        ? const Color(0xFFCFFAFE)
-                        : terlambat
-                            ? const Color(0xFFFCEFD8)
-                            : AppColors.hadirBg,
+                    color: belumAbsen
+                        ? AppColors.errorContainer
+                        : isDinasLuar
+                            ? const Color(0xFFCFFAFE)
+                            : terlambat
+                                ? const Color(0xFFFCEFD8)
+                                : AppColors.hadirBg,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
-                    isDinasLuar
-                        ? 'Dispensasi'
-                        : terlambat
-                            ? 'Terlambat $menitTerlambat Mnt'
-                            : 'Tepat Waktu',
+                    belumAbsen
+                        ? 'Belum Absen'
+                        : isDinasLuar
+                            ? 'Dispensasi'
+                            : terlambat
+                                ? 'Terlambat'
+                                : 'Tepat Waktu',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
-                      color: isDinasLuar
-                          ? const Color(0xFF0891B2)
-                          : terlambat
-                              ? const Color(0xFFB06000)
-                              : AppColors.hadirText,
+                      color: belumAbsen
+                          ? AppColors.error
+                          : isDinasLuar
+                              ? const Color(0xFF0891B2)
+                              : terlambat
+                                  ? const Color(0xFFB06000)
+                                  : AppColors.hadirText,
                     ),
                   ),
                 ),

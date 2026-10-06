@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart'; // untuk akses variabel 'supabase'
 import 'register_page.dart';
@@ -69,17 +70,17 @@ class _LoginPageState extends State<LoginPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.location_on, size: 64, color: Colors.blue),
+                Icon(Icons.location_on, size: 64, color: context.appColors.primary),
                 const SizedBox(height: 16),
                 const Text(
                   'Presensi BPS Kota Batu',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                 ),
-                const Text(
+                Text(
                   'Login untuk peserta magang',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 14, color: Colors.grey),
+                  style: TextStyle(fontSize: 14, color: context.appColors.onSurfaceVariant),
                 ),
                 const SizedBox(height: 32),
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../main.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/theme_switch_tile.dart';
 import '../login_page.dart';
 import '../izin_page.dart';
 import 'absen_susulan_page.dart';
@@ -79,9 +80,9 @@ class _ProfilTabState extends State<ProfilTab> {
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: context.appColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
+              border: Border.all(color: context.appColors.surfaceVariant),
             ),
             child: Column(
               children: [
@@ -90,26 +91,26 @@ class _ProfilTabState extends State<ProfilTab> {
                   height: 88,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.secondaryContainer,
+                    color: context.appColors.secondaryContainer,
                   ),
-                  child: Icon(Icons.person, size: 44, color: AppColors.primary),
+                  child: Icon(Icons.person, size: 44, color: context.appColors.primary),
                 ),
                 const SizedBox(height: 12),
                 Text(_nama, style: AppText.headlineSm),
                 const SizedBox(height: 4),
-                Text(_isAdmin ? 'Admin / Pembimbing' : 'Peserta Magang', style: AppText.bodyMd.copyWith(color: AppColors.secondary)),
+                Text(_isAdmin ? 'Admin / Pembimbing' : 'Peserta Magang', style: AppText.bodyMd.copyWith(color: context.appColors.secondary)),
                 if (_asalInstansi.isNotEmpty && _asalInstansi != '-') ...[
                   const SizedBox(height: 8),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
+                      color: context.appColors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.business, size: 16, color: AppColors.primary),
+                        Icon(Icons.business, size: 16, color: context.appColors.primary),
                         const SizedBox(width: 6),
                         Text(_asalInstansi, style: AppText.labelMd),
                       ],
@@ -127,7 +128,7 @@ class _ProfilTabState extends State<ProfilTab> {
               Expanded(
                 child: _statKartu(
                   icon: Icons.check_circle,
-                  iconColor: AppColors.tertiaryContainer,
+                  iconColor: context.appColors.tertiaryContainer,
                   label: 'Hadir',
                   value: _totalHadir,
                 ),
@@ -136,7 +137,7 @@ class _ProfilTabState extends State<ProfilTab> {
               Expanded(
                 child: _statKartu(
                   icon: Icons.pending_actions,
-                  iconColor: AppColors.secondary,
+                  iconColor: context.appColors.secondary,
                   label: 'Izin/Sakit',
                   value: _totalIzin,
                 ),
@@ -148,9 +149,9 @@ class _ProfilTabState extends State<ProfilTab> {
           // Menu pengaturan
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: context.appColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
+              border: Border.all(color: context.appColors.surfaceVariant),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -172,6 +173,8 @@ class _ProfilTabState extends State<ProfilTab> {
                     label: 'Dashboard Admin',
                     onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AdminDashboardPage())),
                   ),
+                _menuHeader('TAMPILAN'),
+                const ThemeSwitchTile(),
                 _menuHeader('PENGATURAN AKUN'),
                 _menuItem(
                   icon: Icons.edit,
@@ -200,7 +203,7 @@ class _ProfilTabState extends State<ProfilTab> {
                 _menuItem(
                   icon: Icons.logout,
                   label: 'Keluar',
-                  color: AppColors.error,
+                  color: context.appColors.error,
                   onTap: _logout,
                   isLast: true,
                 ),
@@ -217,9 +220,9 @@ class _ProfilTabState extends State<ProfilTab> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: context.appColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surfaceVariant),
+        border: Border.all(color: context.appColors.surfaceVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +241,7 @@ class _ProfilTabState extends State<ProfilTab> {
             children: [
               Text('$value', style: AppText.displayLg),
               const SizedBox(width: 6),
-              Text('Hari', style: AppText.bodyMd.copyWith(color: AppColors.secondary)),
+              Text('Hari', style: AppText.bodyMd.copyWith(color: context.appColors.secondary)),
             ],
           ),
         ],
@@ -250,8 +253,8 @@ class _ProfilTabState extends State<ProfilTab> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.surfaceContainerLow,
-      child: Text(text, style: AppText.labelMd.copyWith(color: AppColors.secondary)),
+      color: context.appColors.surfaceContainerLow,
+      child: Text(text, style: AppText.labelMd.copyWith(color: context.appColors.secondary)),
     );
   }
 
@@ -267,19 +270,19 @@ class _ProfilTabState extends State<ProfilTab> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: AppColors.surfaceVariant)),
+          border: isLast ? null : Border(bottom: BorderSide(color: context.appColors.surfaceVariant)),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
-                Icon(icon, color: color ?? AppColors.primary),
+                Icon(icon, color: color ?? context.appColors.primary),
                 const SizedBox(width: 16),
-                Text(label, style: AppText.bodyLg.copyWith(color: color ?? AppColors.onSurface)),
+                Text(label, style: AppText.bodyLg.copyWith(color: color ?? context.appColors.onSurface)),
               ],
             ),
-            if (color == null) Icon(Icons.chevron_right, color: AppColors.outlineVariant),
+            if (color == null) Icon(Icons.chevron_right, color: context.appColors.outlineVariant),
           ],
         ),
       ),

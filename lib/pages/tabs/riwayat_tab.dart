@@ -141,14 +141,14 @@ class _RiwayatTabState extends State<RiwayatTab> {
   Color _warnaDot(_StatusHari status) {
     switch (status) {
       case _StatusHari.hadir:
-        return AppColors.tertiaryContainer;
+        return context.appColors.tertiaryContainer;
       case _StatusHari.terlambat:
-        return const Color(0xFFB06000);
+        return context.appColors.izinText;
       case _StatusHari.izin:
       case _StatusHari.sakit:
-        return const Color(0xFFDB2777);
+        return context.appColors.pengajuanText;
       case _StatusHari.dinasLuar:
-        return const Color(0xFF0891B2);
+        return context.appColors.dispensasiText;
       case _StatusHari.tidakAda:
         return Colors.transparent;
     }
@@ -204,9 +204,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: context.appColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
             ),
             child: Row(
               children: [
@@ -235,9 +235,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLowest,
+                color: context.appColors.surfaceContainerLowest,
                 borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8)],
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
               ),
               child: Column(
                 children: [
@@ -250,7 +250,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                           child: Text(
                             namaHariSingkat[i],
                             style: AppText.labelMd.copyWith(
-                              color: isWeekend ? AppColors.error : AppColors.onSurfaceVariant,
+                              color: isWeekend ? context.appColors.error : context.appColors.onSurfaceVariant,
                               fontWeight: isWeekend ? FontWeight.w700 : FontWeight.w600,
                             ),
                           ),
@@ -283,13 +283,13 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       if (isWeekend) {
                         return Container(
                           decoration: BoxDecoration(
-                            color: AppColors.errorContainer.withOpacity(0.35),
+                            color: context.appColors.errorContainer.withValues(alpha: 0.35),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           alignment: Alignment.center,
                           child: Text(
                             '$tanggal',
-                            style: const TextStyle(color: AppColors.error, fontWeight: FontWeight.w700, fontSize: 13),
+                            style: TextStyle(color: context.appColors.error, fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                         );
                       }
@@ -299,13 +299,13 @@ class _RiwayatTabState extends State<RiwayatTab> {
                           message: keteranganLibur,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFFF3E8FF),
+                              color: context.appColors.liburBg,
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
                             child: Text(
                               '$tanggal',
-                              style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w700, fontSize: 13),
+                              style: TextStyle(color: context.appColors.liburText, fontWeight: FontWeight.w700, fontSize: 13),
                             ),
                           ),
                         );
@@ -313,7 +313,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
 
                       return Container(
                         decoration: BoxDecoration(
-                          color: isHariIni ? AppColors.primary : Colors.transparent,
+                          color: isHariIni ? context.appColors.primary : Colors.transparent,
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Column(
@@ -324,7 +324,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: isHariIni ? FontWeight.w700 : FontWeight.w500,
-                                color: isHariIni ? Colors.white : AppColors.onSurface,
+                                color: isHariIni ? context.appColors.onPrimary : context.appColors.onSurface,
                               ),
                             ),
                             const SizedBox(height: 2),
@@ -333,7 +333,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                               height: 6,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isHariIni ? Colors.white70 : _warnaDot(status),
+                                color: isHariIni ? context.appColors.onPrimary.withValues(alpha: 0.7) : _warnaDot(status),
                               ),
                             ),
                           ],
@@ -346,7 +346,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow.withOpacity(0.6),
+                      color: context.appColors.surfaceContainerLow.withValues(alpha: 0.6),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Wrap(
@@ -354,12 +354,12 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       runSpacing: 4,
                       alignment: WrapAlignment.spaceBetween,
                       children: [
-                        _legendaItem(AppColors.tertiaryContainer, 'Hadir'),
-                        _legendaItem(const Color(0xFFB06000), 'Terlambat'),
-                        _legendaItem(const Color(0xFFDB2777), 'Izin/Sakit'),
-                        _legendaItem(const Color(0xFF0891B2), 'Dispensasi'),
-                        _legendaItem(const Color(0xFF7C3AED), 'Libur Nasional'),
-                        Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: AppColors.error, fontSize: 11)),
+                        _legendaItem(context.appColors.tertiaryContainer, 'Hadir'),
+                        _legendaItem(context.appColors.izinText, 'Terlambat'),
+                        _legendaItem(context.appColors.pengajuanText, 'Izin/Sakit'),
+                        _legendaItem(context.appColors.dispensasiText, 'Dispensasi'),
+                        _legendaItem(context.appColors.liburText, 'Libur Nasional'),
+                        Text('Sab/Min Libur', style: AppText.labelMd.copyWith(color: context.appColors.error, fontSize: 11)),
                       ],
                     ),
                   ),
@@ -377,10 +377,10 @@ class _RiwayatTabState extends State<RiwayatTab> {
             crossAxisSpacing: 8,
             childAspectRatio: 2.6,
             children: [
-              _kartuStat(Icons.check_circle, AppColors.tertiaryContainer, 'Total Hadir', '$totalHadir', 'Hari'),
-              _kartuStat(Icons.timer, const Color(0xFFB06000), 'Terlambat', '$totalTerlambat', 'Kali'),
-              _kartuStat(Icons.assignment, AppColors.primary, 'Izin/Sakit', '$totalIzin', 'Hari'),
-              _kartuStat(Icons.weekend, AppColors.error, 'Hari Libur', '$totalLibur', 'Hari'),
+              _kartuStat(Icons.check_circle, context.appColors.tertiaryContainer, 'Total Hadir', '$totalHadir', 'Hari'),
+              _kartuStat(Icons.timer, context.appColors.izinText, 'Terlambat', '$totalTerlambat', 'Kali'),
+              _kartuStat(Icons.assignment, context.appColors.primary, 'Izin/Sakit', '$totalIzin', 'Hari'),
+              _kartuStat(Icons.weekend, context.appColors.error, 'Hari Libur', '$totalLibur', 'Hari'),
             ],
           ),
           const SizedBox(height: 24),
@@ -401,7 +401,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
             Container(
               constraints: const BoxConstraints(maxHeight: 420),
               decoration: BoxDecoration(
-                color: AppColors.surfaceContainerLow.withOpacity(0.4),
+                color: context.appColors.surfaceContainerLow.withValues(alpha: 0.4),
                 borderRadius: BorderRadius.circular(16),
               ),
               padding: const EdgeInsets.all(8),
@@ -437,10 +437,10 @@ class _RiwayatTabState extends State<RiwayatTab> {
         width: 40,
         height: 40,
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLow,
+          color: context.appColors.surfaceContainerLow,
           borderRadius: BorderRadius.circular(10),
         ),
-        child: Icon(icon, size: 20, color: AppColors.onSurface),
+        child: Icon(icon, size: 20, color: context.appColors.onSurface),
       ),
     );
   }
@@ -460,16 +460,16 @@ class _RiwayatTabState extends State<RiwayatTab> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: context.appColors.surfaceContainerLowest,
         borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
       ),
       child: Row(
         children: [
           Container(
             width: 36,
             height: 36,
-            decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
             child: Icon(icon, color: color, size: 18),
           ),
           const SizedBox(width: 10),
@@ -483,7 +483,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                   crossAxisAlignment: CrossAxisAlignment.baseline,
                   textBaseline: TextBaseline.alphabetic,
                   children: [
-                    Text(value, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.onSurface)),
+                    Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.appColors.onSurface)),
                     const SizedBox(width: 4),
                     Text(satuan, style: AppText.labelMd.copyWith(fontSize: 10, color: color)),
                   ],
@@ -523,9 +523,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: context.appColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -534,16 +534,16 @@ class _RiwayatTabState extends State<RiwayatTab> {
               children: [
                 Container(
                   width: 32, height: 32,
-                  decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
-                  child: Icon(Icons.badge, size: 16, color: AppColors.primary),
+                  decoration: BoxDecoration(color: context.appColors.surfaceContainerHigh, shape: BoxShape.circle),
+                  child: Icon(Icons.badge, size: 16, color: context.appColors.primary),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(namaHariPanjang[tglObj.weekday - 1], style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
-                      Text('$tanggal ${namaBulan[_bulan]} $_tahun', style: AppText.labelMd.copyWith(fontSize: 11, color: AppColors.onSurfaceVariant)),
+                      Text(namaHariPanjang[tglObj.weekday - 1], style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: context.appColors.onSurface)),
+                      Text('$tanggal ${namaBulan[_bulan]} $_tahun', style: AppText.labelMd.copyWith(fontSize: 11, color: context.appColors.onSurfaceVariant)),
                     ],
                   ),
                 ),
@@ -551,12 +551,12 @@ class _RiwayatTabState extends State<RiwayatTab> {
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: belumAbsen
-                        ? AppColors.errorContainer
+                        ? context.appColors.errorContainer
                         : isDinasLuar
-                            ? const Color(0xFFCFFAFE)
+                            ? context.appColors.dispensasiBg
                             : terlambat
-                                ? const Color(0xFFFCEFD8)
-                                : AppColors.hadirBg,
+                                ? context.appColors.izinBg
+                                : context.appColors.hadirBg,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -571,12 +571,12 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       fontSize: 10,
                       fontWeight: FontWeight.w700,
                       color: belumAbsen
-                          ? AppColors.error
+                          ? context.appColors.error
                           : isDinasLuar
-                              ? const Color(0xFF0891B2)
+                              ? context.appColors.dispensasiText
                               : terlambat
-                                  ? const Color(0xFFB06000)
-                                  : AppColors.hadirText,
+                                  ? context.appColors.izinText
+                                  : context.appColors.hadirText,
                     ),
                   ),
                 ),
@@ -585,16 +585,16 @@ class _RiwayatTabState extends State<RiwayatTab> {
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: AppColors.surfaceContainerLow.withOpacity(0.5), borderRadius: BorderRadius.circular(8)),
+              decoration: BoxDecoration(color: context.appColors.surfaceContainerLow.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)),
               child: Row(
                 children: [
-                  Icon(Icons.login, size: 16, color: terlambat ? const Color(0xFFB06000) : AppColors.tertiaryContainer),
+                  Icon(Icons.login, size: 16, color: terlambat ? context.appColors.izinText : context.appColors.tertiaryContainer),
                   const SizedBox(width: 6),
-                  Text(_formatJam(data['jam_masuk']), style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  Text(_formatJam(data['jam_masuk']), style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: context.appColors.onSurface)),
                   const SizedBox(width: 20),
-                  Icon(Icons.logout, size: 16, color: AppColors.secondary),
+                  Icon(Icons.logout, size: 16, color: context.appColors.secondary),
                   const SizedBox(width: 6),
-                  Text(_formatJam(data['jam_pulang']), style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                  Text(_formatJam(data['jam_pulang']), style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: context.appColors.onSurface)),
                 ],
               ),
             ),
@@ -606,23 +606,23 @@ class _RiwayatTabState extends State<RiwayatTab> {
       Color badgeBg;
       Color badgeText;
       if (status == 'disetujui') {
-        badgeBg = AppColors.secondaryContainer;
-        badgeText = AppColors.primary;
+        badgeBg = context.appColors.secondaryContainer;
+        badgeText = context.appColors.primary;
       } else if (status == 'ditolak') {
-        badgeBg = AppColors.errorContainer;
-        badgeText = AppColors.onErrorContainer;
+        badgeBg = context.appColors.errorContainer;
+        badgeText = context.appColors.onErrorContainer;
       } else {
-        badgeBg = const Color(0xFFFCEFD8);
-        badgeText = const Color(0xFFB06000);
+        badgeBg = context.appColors.izinBg;
+        badgeText = context.appColors.izinText;
       }
 
       return Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: AppColors.surfaceContainerLowest,
+          color: context.appColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -631,15 +631,15 @@ class _RiwayatTabState extends State<RiwayatTab> {
               children: [
                 Container(
                   width: 32, height: 32,
-                  decoration: BoxDecoration(color: AppColors.surfaceContainerHigh, shape: BoxShape.circle),
-                  child: Icon(Icons.event_note, size: 16, color: Color(0xFFDB2777)),
+                  decoration: BoxDecoration(color: context.appColors.surfaceContainerHigh, shape: BoxShape.circle),
+                  child: Icon(Icons.event_note, size: 16, color: context.appColors.pengajuanText),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(labelTanggal, style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: AppColors.onSurface)),
+                      Text(labelTanggal, style: AppText.bodyMd.copyWith(fontWeight: FontWeight.w600, color: context.appColors.onSurface)),
                       Text(
                         data['keterangan'] ?? (data['jenis'] == 'sakit' ? 'Sakit' : 'Izin'),
                         style: AppText.labelMd.copyWith(fontSize: 11),

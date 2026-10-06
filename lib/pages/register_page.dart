@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
+import '../theme/app_theme.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -47,7 +48,7 @@ class _RegisterPageState extends State<RegisterPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Registrasi berhasil! Silakan login.'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.tertiaryContainer,
           ),
         );
         Navigator.of(context).pop(); // kembali ke halaman login

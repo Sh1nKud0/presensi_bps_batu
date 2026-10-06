@@ -48,14 +48,14 @@ class _MainShellState extends State<MainShell> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
+        color: context.appColors.surfaceContainerLowest,
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(16),
           topRight: Radius.circular(16),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withOpacity(0.05),
+            color: context.appColors.primary.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, -4),
           ),
@@ -77,7 +77,7 @@ class _MainShellState extends State<MainShell> {
                   width: 64,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: selected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
+                    color: selected ? context.appColors.primary.withValues(alpha: 0.08) : Colors.transparent,
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Column(
@@ -85,13 +85,13 @@ class _MainShellState extends State<MainShell> {
                     children: [
                       Icon(
                         selected ? item.activeIcon : item.icon,
-                        color: selected ? AppColors.primary : AppColors.secondary,
+                        color: selected ? context.appColors.primary : context.appColors.secondary,
                       ),
                       const SizedBox(height: 4),
                       Text(
                         item.label,
                         style: AppText.labelMd.copyWith(
-                          color: selected ? AppColors.primary : AppColors.secondary,
+                          color: selected ? context.appColors.primary : context.appColors.secondary,
                           fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                         ),
                       ),

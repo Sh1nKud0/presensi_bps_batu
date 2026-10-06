@@ -58,8 +58,8 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keamanan'),
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.onSurface,
+        backgroundColor: context.appColors.background,
+        foregroundColor: context.appColors.onSurface,
         elevation: 0,
       ),
       body: Form(
@@ -107,15 +107,15 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
             ElevatedButton(
               onPressed: _saving ? null : _simpan,
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: context.appColors.primary,
+                foregroundColor: context.appColors.onPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ),
               child: _saving
-                  ? const SizedBox(
+                  ? SizedBox(
                       height: 20, width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                      child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary),
                     )
                   : const Text('Ubah Password'),
             ),

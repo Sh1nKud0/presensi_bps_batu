@@ -100,10 +100,10 @@ class _BerandaTabState extends State<BerandaTab> {
                     height: 40,
                     width: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.secondaryContainer,
+                      color: context.appColors.secondaryContainer,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.account_balance, color: AppColors.primary, size: 22),
+                    child: Icon(Icons.account_balance, color: context.appColors.primary, size: 22),
                   ),
                 ),
               ),
@@ -124,7 +124,7 @@ class _BerandaTabState extends State<BerandaTab> {
                 const TextSpan(text: 'Halo, '),
                 TextSpan(
                   text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: context.appColors.primary, fontWeight: FontWeight.w700),
                 ),
                 const TextSpan(text: ' 👋'),
               ],
@@ -138,9 +138,9 @@ class _BerandaTabState extends State<BerandaTab> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
+              color: context.appColors.surfaceContainerLowest,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
+              border: Border.all(color: context.appColors.surfaceVariant),
             ),
             child: Column(
               children: [
@@ -154,7 +154,7 @@ class _BerandaTabState extends State<BerandaTab> {
                     _formatTanggalLengkap(),
                     textAlign: TextAlign.center,
                     style: AppText.headlineSm.copyWith(
-                      color: AppColors.primary,
+                      color: context.appColors.primary,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
@@ -166,28 +166,28 @@ class _BerandaTabState extends State<BerandaTab> {
                     Expanded(
                       child: _statusKolom(
                         icon: Icons.login,
-                        iconColor: AppColors.tertiaryContainer,
+                        iconColor: context.appColors.tertiaryContainer,
                         value: _formatJam(_absensiHariIni?['jam_masuk']),
                         label: 'Masuk',
                       ),
                     ),
-                    Container(width: 1, height: 48, color: AppColors.surfaceVariant),
+                    Container(width: 1, height: 48, color: context.appColors.surfaceVariant),
                     Expanded(
                       child: _statusKolom(
                         icon: Icons.logout,
-                        iconColor: sudahPulang ? AppColors.secondary : AppColors.outline,
+                        iconColor: sudahPulang ? context.appColors.secondary : context.appColors.outline,
                         value: _formatJam(_absensiHariIni?['jam_pulang']),
                         label: 'Pulang',
                       ),
                     ),
-                    Container(width: 1, height: 48, color: AppColors.surfaceVariant),
+                    Container(width: 1, height: 48, color: context.appColors.surfaceVariant),
                     Expanded(
                       child: _statusKolom(
                         icon: jamKerjaPenuh ? Icons.flag_circle : Icons.schedule,
-                        iconColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
+                        iconColor: jamKerjaPenuh ? context.appColors.tertiaryContainer : context.appColors.primary,
                         value: '${durasi.inHours}j ${durasi.inMinutes % 60}m',
                         label: jamKerjaPenuh ? 'Kerja • 8j+' : 'Kerja',
-                        valueColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
+                        valueColor: jamKerjaPenuh ? context.appColors.tertiaryContainer : context.appColors.primary,
                       ),
                     ),
                   ],
@@ -205,11 +205,11 @@ class _BerandaTabState extends State<BerandaTab> {
               icon: const Icon(Icons.fingerprint, size: 28),
               label: Text(
                 sudahMasuk && sudahPulang ? 'Presensi Hari Ini Selesai' : 'Absen Sekarang',
-                style: AppText.headlineSm.copyWith(color: Colors.white),
+                style: AppText.headlineSm.copyWith(color: context.appColors.onPrimary),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: context.appColors.primary,
+                foregroundColor: context.appColors.onPrimary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 0,
               ),
@@ -222,13 +222,13 @@ class _BerandaTabState extends State<BerandaTab> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.errorContainer.withOpacity(0.6),
+                color: context.appColors.errorContainer.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: context.appColors.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.notification_important, color: AppColors.error, size: 22),
+                  Icon(Icons.notification_important, color: context.appColors.error, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -237,14 +237,14 @@ class _BerandaTabState extends State<BerandaTab> {
                         Text(
                           'Anda belum absen hari ini!',
                           style: AppText.bodyMd.copyWith(
-                            color: AppColors.onErrorContainer,
+                            color: context.appColors.onErrorContainer,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Segera lakukan presensi. Jika ada kendala (dinas luar/GPS error), ajukan Absen Susulan di menu Profil.',
-                          style: AppText.bodyMd.copyWith(color: AppColors.onErrorContainer, fontSize: 12),
+                          style: AppText.bodyMd.copyWith(color: context.appColors.onErrorContainer, fontSize: 12),
                         ),
                       ],
                     ),
@@ -259,17 +259,17 @@ class _BerandaTabState extends State<BerandaTab> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.hadirBg,
+                color: context.appColors.hadirBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.flag_circle, color: AppColors.hadirText, size: 20),
+                  Icon(Icons.flag_circle, color: context.appColors.hadirText, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Target jam kerja hari ini sudah tercapai (8 jam+).',
-                      style: AppText.bodyMd.copyWith(color: AppColors.hadirText, fontSize: 12),
+                      style: AppText.bodyMd.copyWith(color: context.appColors.hadirText, fontSize: 12),
                     ),
                   ),
                 ],
@@ -302,7 +302,7 @@ class _BerandaTabState extends State<BerandaTab> {
       children: [
         Icon(icon, color: iconColor, size: 22),
         const SizedBox(height: 4),
-        Text(value, style: AppText.headlineSm.copyWith(color: valueColor ?? AppColors.onSurface)),
+        Text(value, style: AppText.headlineSm.copyWith(color: valueColor ?? context.appColors.onSurface)),
         const SizedBox(height: 2),
         Text(label, style: AppText.labelMd.copyWith(fontSize: 11)),
       ],

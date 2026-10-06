@@ -1,10 +1,10 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
-import 'package:excel_plus/excel_plus.dart' as xls;
+import '../services/rekap_presensi.dart';
+import '../services/rekap_excel.dart';
 import '../main.dart';
 
 class AdminDashboardPage extends StatefulWidget {
@@ -98,10 +98,16 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   }
 
   Future<void> _ambilRekapSemua() async {
+    final bulan = _bulanRekap;
+    final tahun = _tahunRekap;
     setState(() => _loadingRekap = true);
     try {
-      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
-      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
+      final awal = DateTime(tahun, bulan, 1).toIso8601String().substring(0, 10);
+      final akhir = DateTime(
+        tahun,
+        bulan + 1,
+        0,
+      ).toIso8601String().substring(0, 10);
 
       // Join absensi dengan profiles untuk ambil nama peserta
       final response = await supabase
@@ -111,15 +117,17 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           .lte('tanggal', akhir)
           .order('tanggal', ascending: false);
 
+      if (!mounted || bulan != _bulanRekap || tahun != _tahunRekap) return;
       setState(() => _rekapSemua = List<Map<String, dynamic>>.from(response));
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memuat rekap: $e')),
-        );
+      if (mounted && bulan == _bulanRekap && tahun == _tahunRekap) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Gagal memuat rekap: $e')));
       }
     } finally {
-      if (mounted) setState(() => _loadingRekap = false);
+      if (mounted && bulan == _bulanRekap && tahun == _tahunRekap) {
+        setState(() => _loadingRekap = false);
+      }
     }
   }
 
@@ -406,8 +414,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   String _formatJam(dynamic value) {
     if (value == null) return '-';
-    final dt = DateTime.parse(value.toString()).toLocal();
-    return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    return jamRekap(value);
   }
 
   @override
@@ -484,164 +491,92 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
       ][b];
 
-  // Helper pencarian manual - menghindari masalah tipe data null pada firstWhere()
-  Map<String, dynamic>? _cariBaris(List list, bool Function(Map<String, dynamic>) test) {
-    for (final item in list) {
-      final map = item as Map<String, dynamic>;
-      if (test(map)) return map;
+  // Pagination prevents a large monthly export from being silently truncated.
+  Future<List<Map<String, dynamic>>> _ambilSemuaHalaman(
+    Future<List<Map<String, dynamic>>> Function(int, int) ambil,
+  ) async {
+    const ukuran = 500;
+    final hasil = <Map<String, dynamic>>[];
+    while (true) {
+      final halaman = await ambil(hasil.length, hasil.length + ukuran - 1);
+      hasil.addAll(halaman);
+      if (halaman.isEmpty) return hasil;
     }
-    return null;
   }
 
-  // Export rekap sebagai 1 file Excel (XLSX) dengan 2 sheet:
-  // Sheet "Ringkasan" = jumlah hadir/terlambat/izin per peserta
-  // Sheet "Detail"    = rincian harian per peserta, header tanggal di-merge asli (bukan CSV)
   Future<void> _unduhRekapXlsx() async {
+    if (_sedangExport) return;
+    final bulan = _bulanRekap;
+    final tahun = _tahunRekap;
+    final sekarang = DateTime.now();
     setState(() => _sedangExport = true);
     try {
-      final semuaPeserta = await supabase.from('profiles').select().eq('role', 'peserta').order('nama_lengkap');
-
-      final awal = DateTime(_tahunRekap, _bulanRekap, 1).toIso8601String().substring(0, 10);
-      final akhir = DateTime(_tahunRekap, _bulanRekap + 1, 0).toIso8601String().substring(0, 10);
-
-      final absensiBulan = await supabase.from('absensi').select().gte('tanggal', awal).lte('tanggal', akhir);
-      final izinBulan = await supabase
-          .from('izin')
-          .select()
-          .eq('status_persetujuan', 'disetujui')
-          .gte('tanggal_mulai', awal)
-          .lte('tanggal_mulai', akhir);
-
-      final workbook = xls.Excel.createExcel();
-      workbook.rename('Sheet1', 'Ringkasan');
-
-      // ===== SHEET 1: RINGKASAN =====
-      final ringkasan = workbook['Ringkasan'];
-      const headerRingkasan = ['nama', 'hadir', 'terlambat', 'izin', 'dispensasi', 'total'];
-      for (int c = 0; c < headerRingkasan.length; c++) {
-        final cell = ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 0));
-        cell.value = xls.TextCellValue(headerRingkasan[c]);
-        cell.cellStyle = xls.CellStyle(bold: true);
-      }
-
-      int rowIdx = 1;
-      for (final peserta in semuaPeserta) {
-        final userId = peserta['id'];
-        final absensiUser = (absensiBulan as List).where((a) => a['user_id'] == userId);
-        final izinUser = (izinBulan as List).where((i) => i['user_id'] == userId).length;
-
-        int hadir = 0, terlambat = 0, dispensasi = 0;
-        for (final a in absensiUser) {
-          if (a['status'] == 'dispensasi') {
-            dispensasi++;
-          } else if (a['jam_masuk'] != null) {
-            hadir++;
-            final jm = DateTime.parse(a['jam_masuk'].toString()).toLocal();
-            if (jm.hour > 7 || (jm.hour == 7 && jm.minute > 30)) terlambat++;
-          }
-        }
-        final total = hadir + izinUser + dispensasi;
-
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: rowIdx)).value =
-            xls.TextCellValue(peserta['nama_lengkap'] ?? '-');
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: rowIdx)).value = xls.IntCellValue(hadir);
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 2, rowIndex: rowIdx)).value = xls.IntCellValue(terlambat);
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 3, rowIndex: rowIdx)).value = xls.IntCellValue(izinUser);
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 4, rowIndex: rowIdx)).value = xls.IntCellValue(dispensasi);
-        ringkasan.cell(xls.CellIndex.indexByColumnRow(columnIndex: 5, rowIndex: rowIdx)).value = xls.IntCellValue(total);
-        rowIdx++;
-      }
-
-      // ===== SHEET 2: DETAIL (header tanggal di-merge beneran, bukan diulang seperti CSV) =====
-      final detail = workbook['Detail'];
-
-      final Set<String> tanggalSet = {};
-      for (final a in (absensiBulan)) {
-        tanggalSet.add(a['tanggal'].toString());
-      }
-      for (final i in (izinBulan)) {
-        tanggalSet.add(i['tanggal_mulai'].toString());
-      }
-      final daftarTanggal = tanggalSet.toList()..sort();
-
-      if (daftarTanggal.isNotEmpty) {
-        for (int i = 0; i < daftarTanggal.length; i++) {
-          final startCol = 2 + (i * 3);
-          final cell = detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: startCol, rowIndex: 0));
-          cell.value = xls.TextCellValue(daftarTanggal[i]);
-          cell.cellStyle = xls.CellStyle(bold: true, horizontalAlign: xls.HorizontalAlign.Center);
-          detail.merge(
-            xls.CellIndex.indexByColumnRow(columnIndex: startCol, rowIndex: 0),
-            xls.CellIndex.indexByColumnRow(columnIndex: startCol + 2, rowIndex: 0),
-          );
-        }
-
-        final headerBaris2 = <String>['no', 'nama'];
-        for (int i = 0; i < daftarTanggal.length; i++) {
-          headerBaris2.addAll(['jam masuk', 'jam pulang', 'keterangan']);
-        }
-        for (int c = 0; c < headerBaris2.length; c++) {
-          final cell = detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: c, rowIndex: 1));
-          cell.value = xls.TextCellValue(headerBaris2[c]);
-          cell.cellStyle = xls.CellStyle(bold: true);
-        }
-
-        int no = 1;
-        int baris = 2;
-        for (final peserta in semuaPeserta) {
-          final userId = peserta['id'];
-          detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: 0, rowIndex: baris)).value = xls.IntCellValue(no);
-          detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: 1, rowIndex: baris)).value =
-              xls.TextCellValue(peserta['nama_lengkap'] ?? '-');
-
-          for (int i = 0; i < daftarTanggal.length; i++) {
-            final tgl = daftarTanggal[i];
-            final col = 2 + (i * 3);
-
-            final absensiHari = _cariBaris(absensiBulan, (a) => a['user_id'] == userId && a['tanggal'].toString() == tgl);
-            final izinHari = _cariBaris(izinBulan, (i2) => i2['user_id'] == userId && i2['tanggal_mulai'].toString() == tgl);
-
-            String jm = '-', jp = '-', ket = '-';
-            if (absensiHari != null) {
-              jm = _formatJam(absensiHari['jam_masuk']);
-              jp = _formatJam(absensiHari['jam_pulang']);
-              ket = 'Hadir';
-              if (absensiHari['status'] == 'dispensasi') {
-                ket = 'Dispensasi';
-              } else if (absensiHari['jam_masuk'] != null) {
-                final jamMasukDt = DateTime.parse(absensiHari['jam_masuk'].toString()).toLocal();
-                if (jamMasukDt.hour > 7 || (jamMasukDt.hour == 7 && jamMasukDt.minute > 30)) ket = 'Terlambat';
-              }
-            } else if (izinHari != null) {
-              ket = izinHari['jenis'] == 'sakit' ? 'Sakit' : 'Izin';
-            }
-
-            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col, rowIndex: baris)).value = xls.TextCellValue(jm);
-            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col + 1, rowIndex: baris)).value = xls.TextCellValue(jp);
-            detail.cell(xls.CellIndex.indexByColumnRow(columnIndex: col + 2, rowIndex: baris)).value = xls.TextCellValue(ket);
-          }
-
-          no++;
-          baris++;
-        }
-      }
-
-      final fileBytes = workbook.save();
-      if (fileBytes == null) throw Exception('Gagal membuat file Excel');
-
-      final namaFile = 'rekap_presensi_${_namaBulan(_bulanRekap)}_$_tahunRekap';
-      final bytes = Uint8List.fromList(fileBytes);
+      final awal = tanggalRekap(DateTime.utc(tahun, bulan, 1));
+      final akhir = tanggalRekap(DateTime.utc(tahun, bulan + 1, 0));
+      final data = await Future.wait([
+        _ambilSemuaHalaman(
+          (dari, sampai) async => await supabase
+              .from('profiles')
+              .select()
+              .eq('role', 'peserta')
+              .order('id')
+              .range(dari, sampai),
+        ),
+        _ambilSemuaHalaman(
+          (dari, sampai) async => await supabase
+              .from('absensi')
+              .select()
+              .gte('tanggal', awal)
+              .lte('tanggal', akhir)
+              .order('id')
+              .range(dari, sampai),
+        ),
+        _ambilSemuaHalaman(
+          (dari, sampai) async => await supabase
+              .from('izin')
+              .select()
+              .eq('status_persetujuan', 'disetujui')
+              .lte('tanggal_mulai', akhir)
+              .gte('tanggal_selesai', awal)
+              .order('id')
+              .range(dari, sampai),
+        ),
+        _ambilSemuaHalaman(
+          (dari, sampai) async => await supabase
+              .from('hari_libur')
+              .select()
+              .gte('tanggal', awal)
+              .lte('tanggal', akhir)
+              .order('id')
+              .range(dari, sampai),
+        ),
+      ]);
+      final rekap = RekapPresensi.hitung(
+        bulan: bulan,
+        tahun: tahun,
+        profiles: data[0],
+        absensi: data[1],
+        izin: data[2],
+        libur: data[3],
+        sekarang: sekarang,
+      );
+      final bytes = buatExcelRekap(rekap);
+      final namaFile = 'rekap_presensi_${_namaBulan(bulan)}_$tahun';
 
       try {
-        await FileSaver.instance.saveAs(
+        final lokasi = await FileSaver.instance.saveAs(
           name: namaFile,
           bytes: bytes,
           fileExtension: 'xlsx',
           mimeType: MimeType.microsoftExcel,
         );
+        if (lokasi == null) return;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File Excel berhasil disimpan'), backgroundColor: Colors.green),
+            const SnackBar(
+              content: Text('File Excel berhasil disimpan'),
+              backgroundColor: Colors.green,
+            ),
           );
         }
       } catch (e) {
@@ -649,11 +584,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/$namaFile.xlsx');
         await file.writeAsBytes(bytes);
-        await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], text: namaFile));
+        await SharePlus.instance.share(
+          ShareParams(files: [XFile(file.path)], text: namaFile),
+        );
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal export: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gagal export: $e')));
     } finally {
       if (mounted) setState(() => _sedangExport = false);
     }
@@ -681,7 +619,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       items: List.generate(12, (i) => i + 1)
                           .map((b) => DropdownMenuItem(value: b, child: Text(_namaBulan(b))))
                           .toList(),
-                      onChanged: (v) {
+                      onChanged: _sedangExport ? null : (v) {
                         setState(() => _bulanRekap = v!);
                         _ambilRekapSemua();
                       },
@@ -698,7 +636,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       )
                           .map((t) => DropdownMenuItem(value: t, child: Text('$t')))
                           .toList(),
-                      onChanged: (v) {
+                      onChanged: _sedangExport ? null : (v) {
                         setState(() => _tahunRekap = v!);
                         _ambilRekapSemua();
                       },
@@ -712,7 +650,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                 child: OutlinedButton.icon(
                   onPressed: _sedangExport ? null : _unduhRekapXlsx,
                   icon: const Icon(Icons.download, size: 16),
-                  label: const Text('Unduh Ringkasan & Detail'),
+                  label: const Text('Unduh Rekap & Detail'),
                 ),
               ),
               if (_sedangExport) ...[
@@ -732,32 +670,40 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     String label;
     Color bg, text;
 
-    if (item['status'] == 'dispensasi') {
-      label = 'DISPENSASI';
-      bg = const Color(0xFFCFFAFE);
-      text = const Color(0xFF0891B2);
-    } else if (item['jam_masuk'] != null) {
-      final jm = DateTime.parse(item['jam_masuk'].toString()).toLocal();
-      final terlambat = jm.hour > 7 || (jm.hour == 7 && jm.minute > 30);
-      if (terlambat) {
-        label = 'TERLAMBAT';
+    label = statusPresensi(item).toUpperCase();
+    switch (label) {
+      case 'DISPENSASI':
+        bg = const Color(0xFFCFFAFE);
+        text = const Color(0xFF0891B2);
+      case 'TERLAMBAT':
         bg = const Color(0xFFFCEFD8);
         text = const Color(0xFFB06000);
-      } else {
-        label = 'HADIR';
+      case 'HADIR':
         bg = const Color(0xFFE6F4EA);
         text = const Color(0xFF137333);
-      }
-    } else {
-      label = '-';
-      bg = Colors.grey.shade200;
-      text = Colors.grey.shade700;
+      case 'IZIN':
+      case 'SAKIT':
+        bg = const Color(0xFFE4DFEC);
+        text = const Color(0xFF674EA7);
+      default:
+        bg = Colors.grey.shade200;
+        text = Colors.grey.shade700;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-      child: Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: text)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: text,
+        ),
+      ),
     );
   }
 

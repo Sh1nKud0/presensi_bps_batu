@@ -31,12 +31,12 @@ class _AbsenSusulanPageState extends State<AbsenSusulanPage> with SingleTickerPr
     return Scaffold(
       appBar: AppBar(
         title: const Text('Absen Susulan'),
-        backgroundColor: context.appColors.background,
-        foregroundColor: context.appColors.onSurface,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.onSurface,
         elevation: 0,
         bottom: TabBar(
           controller: _tabController,
-          labelColor: context.appColors.primary,
+          labelColor: AppColors.primary,
           tabs: const [Tab(text: 'Ajukan'), Tab(text: 'Riwayat')],
         ),
       ),
@@ -189,10 +189,10 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: context.appColors.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
+            decoration: BoxDecoration(color: AppColors.secondaryContainer.withOpacity(0.5), borderRadius: BorderRadius.circular(10)),
             child: Row(
               children: [
-                Icon(Icons.info_outline, color: context.appColors.primary, size: 18),
+                Icon(Icons.info_outline, color: AppColors.primary, size: 18),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -283,12 +283,12 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
           ElevatedButton(
             onPressed: _isLoading ? null : _submit,
             style: ElevatedButton.styleFrom(
-              backgroundColor: context.appColors.primary,
-              foregroundColor: context.appColors.onPrimary,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
             child: _isLoading
-                ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary))
+                ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                 : const Text('Ajukan Absen Susulan'),
           ),
         ],
@@ -337,11 +337,11 @@ class _RiwayatSusulanState extends State<_RiwayatSusulan> {
   Color _warnaStatus(String status) {
     switch (status) {
       case 'disetujui':
-        return context.appColors.tertiaryContainer;
+        return AppColors.tertiaryContainer;
       case 'ditolak':
-        return context.appColors.error;
+        return AppColors.error;
       default:
-        return context.appColors.izinText;
+        return const Color(0xFFB06000);
     }
   }
 
@@ -376,7 +376,7 @@ class _RiwayatSusulanState extends State<_RiwayatSusulan> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _warnaStatus(status).withValues(alpha: 0.15),
+                                color: _warnaStatus(status).withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -394,7 +394,7 @@ class _RiwayatSusulanState extends State<_RiwayatSusulan> {
                         if (item['jam_pulang_diajukan'] != null)
                           Text('Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}', style: AppText.bodyMd),
                         const SizedBox(height: 4),
-                        Text(item['keterangan'] ?? '-', style: AppText.bodyMd.copyWith(color: context.appColors.secondary)),
+                        Text(item['keterangan'] ?? '-', style: AppText.bodyMd.copyWith(color: AppColors.secondary)),
                       ],
                     ),
                   ),

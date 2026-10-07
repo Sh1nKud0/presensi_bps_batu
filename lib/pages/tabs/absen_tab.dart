@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import '../../widgets/attendance_map_card.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' as ll;
 import '../../main.dart';
 import '../../theme/app_theme.dart';
@@ -272,6 +272,7 @@ class _AbsenTabState extends State<AbsenTab> {
     final sudahMasuk = _absensiHariIni != null && _absensiHariIni!['jam_masuk'] != null;
     final sudahPulang = _absensiHariIni != null && _absensiHariIni!['jam_pulang'] != null;
     final selesai = sudahMasuk && sudahPulang;
+    final dalamRadius = _jarakKeKantor != null && _jarakKeKantor! <= kRadiusMeter;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -281,16 +282,144 @@ class _AbsenTabState extends State<AbsenTab> {
           Text('Lakukan Absensi', style: AppText.headlineMdMobile),
           const SizedBox(height: 16),
 
-          AttendanceMapCard(
-            office: const ll.LatLng(kLatitudeKantor, kLongitudeKantor),
-            radius: kRadiusMeter,
-            position: _currentPosition == null ? null : ll.LatLng(
-              _currentPosition!.latitude, _currentPosition!.longitude),
-            distance: _jarakKeKantor,
-            accuracy: _currentPosition?.accuracy,
-            locationReady: _lokasiDiambil,
-            refreshing: _isLoading,
-            onRefresh: _ambilLokasi,
+          // Kartu peta / lokasi
+          Container(
+            decoration: BoxDecoration(
+              color: AppColors.surfaceContainerLowest,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.surfaceVariant),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))],
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                // Peta asli (OpenStreetMap)
+                SizedBox(
+                  height: 200,
+                  width: double.infinity,
+                  child: _currentPosition == null
+                      ? Container(
+                          color: AppColors.surfaceContainerHigh,
+                          child: const Center(child: CircularProgressIndicator()),
+                        )
+                      : FlutterMap(
+                          options: MapOptions(
+                            initialCenter: ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                            initialZoom: 17,
+                            interactionOptions: const InteractionOptions(
+                              flags: InteractiveFlag.pinchZoom | InteractiveFlag.drag,
+                            ),
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.example.presensi_bps_batu',
+                            ),
+                            CircleLayer(
+                              circles: [
+                                CircleMarker(
+                                  point: const ll.LatLng(kLatitudeKantor, kLongitudeKantor),
+                                  radius: kRadiusMeter,
+                                  useRadiusInMeter: true,
+                                  color: AppColors.primary.withOpacity(0.15),
+                                  borderColor: AppColors.primary.withOpacity(0.4),
+                                  borderStrokeWidth: 1.5,
+                                ),
+                              ],
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                // Marker kantor BPS
+                                Marker(
+                                  point: const ll.LatLng(kLatitudeKantor, kLongitudeKantor),
+                                  width: 32,
+                                  height: 32,
+                                  child: Icon(Icons.apartment, color: AppColors.secondary, size: 28),
+                                ),
+                                // Marker lokasi user
+                                Marker(
+                                  point: ll.LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                                  width: 36,
+                                  height: 36,
+                                  child: Icon(Icons.location_on, color: AppColors.primary, size: 36),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.my_location, color: AppColors.secondary, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Lokasi Saat Ini', style: AppText.labelMd.copyWith(color: AppColors.onSurface)),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _currentPosition == null
+                                      ? 'Mencari lokasi...'
+                                      : 'Lat ${_currentPosition!.latitude.toStringAsFixed(4)}, Long ${_currentPosition!.longitude.toStringAsFixed(4)}',
+                                  style: AppText.bodyMd,
+                                ),
+                                if (_jarakKeKantor != null)
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      'Jarak dari kantor: ${_jarakKeKantor!.toStringAsFixed(0)} m',
+                                      style: AppText.bodyMd.copyWith(fontSize: 12, color: AppColors.secondary),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: _currentPosition == null
+                                  ? AppColors.outline
+                                  : dalamRadius
+                                      ? AppColors.tertiaryFixedDim
+                                      : AppColors.error,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _currentPosition == null
+                                ? 'Menunggu lokasi'
+                                : dalamRadius
+                                    ? 'Dalam radius kantor'
+                                    : 'Di luar radius kantor',
+                            style: AppText.labelMd.copyWith(
+                              color: _currentPosition == null
+                                  ? AppColors.outline
+                                  : dalamRadius
+                                      ? AppColors.tertiaryContainer
+                                      : AppColors.error,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 24),
 
@@ -300,7 +429,7 @@ class _AbsenTabState extends State<AbsenTab> {
               padding: const EdgeInsets.all(16),
               margin: const EdgeInsets.only(bottom: 16),
               decoration: BoxDecoration(
-                color: context.appColors.errorContainer.withValues(alpha: 0.5),
+                color: AppColors.errorContainer.withOpacity(0.5),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Column(
@@ -308,12 +437,12 @@ class _AbsenTabState extends State<AbsenTab> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.location_off, color: context.appColors.error, size: 20),
+                      const Icon(Icons.location_off, color: AppColors.error, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _errorLokasi!,
-                          style: TextStyle(color: context.appColors.error, fontSize: 12),
+                          style: const TextStyle(color: AppColors.error, fontSize: 12),
                         ),
                       ),
                     ],
@@ -325,7 +454,7 @@ class _AbsenTabState extends State<AbsenTab> {
                       onPressed: _isLoading ? null : _ambilLokasi,
                       icon: const Icon(Icons.refresh, size: 16),
                       label: const Text('Coba Lagi'),
-                      style: OutlinedButton.styleFrom(foregroundColor: context.appColors.error),
+                      style: OutlinedButton.styleFrom(foregroundColor: AppColors.error),
                     ),
                   ),
                 ],
@@ -337,12 +466,12 @@ class _AbsenTabState extends State<AbsenTab> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: context.appColors.liburBg,
+                color: const Color(0xFFF3E8FF),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.beach_access, color: context.appColors.liburText),
+                  const Icon(Icons.beach_access, color: Color(0xFF7C3AED)),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Column(
@@ -350,11 +479,11 @@ class _AbsenTabState extends State<AbsenTab> {
                       children: [
                         Text(
                           'Hari Libur: $_keteranganLibur',
-                          style: TextStyle(color: context.appColors.liburText, fontWeight: FontWeight.w700, fontSize: 13),
+                          style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.w700, fontSize: 13),
                         ),
-                        Text(
+                        const Text(
                           'Presensi tidak diperlukan hari ini.',
-                          style: TextStyle(color: context.appColors.liburText, fontSize: 12),
+                          style: TextStyle(color: Color(0xFF7C3AED), fontSize: 12),
                         ),
                       ],
                     ),
@@ -366,17 +495,17 @@ class _AbsenTabState extends State<AbsenTab> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: context.appColors.hadirBg,
+                color: AppColors.hadirBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.check_circle, color: context.appColors.hadirText),
+                  Icon(Icons.check_circle, color: AppColors.hadirText),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Presensi hari ini sudah lengkap (masuk & pulang).',
-                      style: AppText.bodyMd.copyWith(color: context.appColors.hadirText),
+                      style: AppText.bodyMd.copyWith(color: AppColors.hadirText),
                     ),
                   ),
                 ],
@@ -389,19 +518,19 @@ class _AbsenTabState extends State<AbsenTab> {
               child: ElevatedButton(
                 onPressed: _isLoading ? null : _kirimAbsensi,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: context.appColors.primary,
-                  foregroundColor: context.appColors.onPrimary,
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                   elevation: 2,
                 ),
                 child: _isLoading
                     ? SizedBox(
                         height: 20, width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary.withValues(alpha: 0.9)),
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white.withOpacity(0.9)),
                       )
                     : Text(
                         sudahMasuk ? 'Kirim Absen Pulang' : 'Kirim Absen Masuk',
-                        style: AppText.headlineSm.copyWith(color: context.appColors.onPrimary, fontSize: 16),
+                        style: AppText.headlineSm.copyWith(color: Colors.white, fontSize: 16),
                       ),
               ),
             ),

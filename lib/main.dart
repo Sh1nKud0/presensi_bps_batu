@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'pages/login_page.dart';
 import 'pages/main_shell.dart';
 import 'notification_service.dart';
 import 'theme/app_theme.dart';
-import 'theme/theme_controller.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -18,7 +16,6 @@ Future<void> main() async {
   );
 
   await NotificationService.instance.init();
-  await appThemeController.load();
 
   runApp(const MyApp());
 }
@@ -28,17 +25,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ValueListenableBuilder<ThemeMode>(
-      valueListenable: appThemeController,
-      builder: (context, mode, _) => MaterialApp(
-        title: 'Presensi BPS Kota Batu',
-        debugShowCheckedModeBanner: false,
-        theme: buildAppTheme(),
-        darkTheme: buildAppTheme(brightness: Brightness.dark),
-        themeMode: mode,
-        scrollBehavior: const _NoStretchScrollBehavior(),
-        home: const AuthGate(),
-      ),
+    return MaterialApp(
+      title: 'Presensi BPS Kota Batu',
+      debugShowCheckedModeBanner: false,
+      theme: buildAppTheme(),
+      scrollBehavior: const _NoStretchScrollBehavior(),
+      home: const AuthGate(),
     );
   }
 }
@@ -59,15 +51,10 @@ class _NoStretchScrollBehavior extends MaterialScrollBehavior {
   const _NoStretchScrollBehavior();
 
   @override
-  AndroidOverscrollIndicator? get androidOverscrollIndicator =>
-      AndroidOverscrollIndicator.glow;
+  AndroidOverscrollIndicator? get androidOverscrollIndicator => AndroidOverscrollIndicator.glow;
 
   @override
-  Widget buildOverscrollIndicator(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) {
+  Widget buildOverscrollIndicator(BuildContext context, Widget child, ScrollableDetails details) {
     return child; // hilangkan efek overscroll sama sekali
   }
 }

@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import 'package:image_picker/image_picker.dart';
 import '../main.dart';
 
@@ -142,9 +141,9 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        const SnackBar(
           content: Text('Pengajuan berhasil dikirim! Menunggu persetujuan admin.'),
-          backgroundColor: context.appColors.hadirText,
+          backgroundColor: Colors.green,
         ),
       );
 
@@ -315,11 +314,11 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
   Color _warnaStatus(String status) {
     switch (status) {
       case 'disetujui':
-        return context.appColors.hadirText;
+        return Colors.green;
       case 'ditolak':
-        return context.appColors.error;
+        return Colors.red;
       default:
-        return context.appColors.izinText;
+        return Colors.orange;
     }
   }
 
@@ -360,7 +359,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _warnaStatus(status).withValues(alpha: 0.15),
+                                color: _warnaStatus(status).withOpacity(0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -379,7 +378,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
                         const SizedBox(height: 4),
                         Text(
                           item['keterangan'] ?? '-',
-                          style: TextStyle(color: context.appColors.onSurfaceVariant),
+                          style: const TextStyle(color: Colors.grey),
                         ),
                       ],
                     ),

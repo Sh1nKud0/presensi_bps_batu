@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
@@ -166,7 +165,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(disetujui ? 'Izin disetujui' : 'Izin ditolak'),
-          backgroundColor: disetujui ? AppColors.tertiaryContainer : AppColors.error,
+          backgroundColor: disetujui ? Colors.green : Colors.red,
         ),
       );
     } catch (e) {
@@ -207,7 +206,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       await _ambilHariLibur();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hari libur ditambahkan'), backgroundColor: AppColors.tertiaryContainer),
+        const SnackBar(content: Text('Hari libur ditambahkan'), backgroundColor: Colors.green),
       );
     } catch (e) {
       if (!mounted) return;
@@ -375,7 +374,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(disetujui ? 'Absen susulan disetujui & data presensi diperbarui' : 'Absen susulan ditolak'),
-          backgroundColor: disetujui ? AppColors.tertiaryContainer : AppColors.error,
+          backgroundColor: disetujui ? Colors.green : Colors.red,
         ),
       );
     } catch (e) {
@@ -468,10 +467,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               leading: CircleAvatar(
-                backgroundColor: sudahAbsen ? context.appColors.hadirBg : context.appColors.errorContainer,
+                backgroundColor: sudahAbsen ? Colors.green.shade100 : Colors.red.shade100,
                 child: Icon(
                   sudahAbsen ? Icons.check : Icons.close,
-                  color: sudahAbsen ? context.appColors.hadirText : context.appColors.error,
+                  color: sudahAbsen ? Colors.green : Colors.red,
                 ),
               ),
               title: Text(peserta['nama_lengkap'] ?? '-'),
@@ -576,7 +575,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('File Excel berhasil disimpan'),
-              backgroundColor: AppColors.tertiaryContainer,
+              backgroundColor: Colors.green,
             ),
           );
         }
@@ -606,7 +605,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: context.appColors.surfaceContainerLow,
+            color: Colors.grey.shade100,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -674,21 +673,21 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     label = statusPresensi(item).toUpperCase();
     switch (label) {
       case 'DISPENSASI':
-        bg = context.appColors.dispensasiBg;
-        text = context.appColors.dispensasiText;
+        bg = const Color(0xFFCFFAFE);
+        text = const Color(0xFF0891B2);
       case 'TERLAMBAT':
-        bg = context.appColors.izinBg;
-        text = context.appColors.izinText;
+        bg = const Color(0xFFFCEFD8);
+        text = const Color(0xFFB06000);
       case 'HADIR':
-        bg = context.appColors.hadirBg;
-        text = context.appColors.hadirText;
+        bg = const Color(0xFFE6F4EA);
+        text = const Color(0xFF137333);
       case 'IZIN':
       case 'SAKIT':
-        bg = context.appColors.sakitBg;
-        text = context.appColors.sakitText;
+        bg = const Color(0xFFE4DFEC);
+        text = const Color(0xFF674EA7);
       default:
-        bg = context.appColors.surfaceContainerHigh;
-        text = context.appColors.onSurfaceVariant;
+        bg = Colors.grey.shade200;
+        text = Colors.grey.shade700;
     }
 
     return Container(
@@ -770,7 +769,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                   const SizedBox(height: 4),
                   Text('${(item['jenis'] as String).toUpperCase()} — ${item['tanggal_mulai']} s/d ${item['tanggal_selesai']}'),
                   const SizedBox(height: 4),
-                  Text(item['keterangan'] ?? '-', style: TextStyle(color: context.appColors.onSurfaceVariant)),
+                  Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
                   if (item['bukti_url'] != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
@@ -786,14 +785,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                             if (progress == null) return child;
                             return Container(
                               height: 140,
-                              color: context.appColors.surfaceContainerHigh,
+                              color: Colors.grey.shade200,
                               child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             );
                           },
                           errorBuilder: (context, error, stackTrace) => Container(
                             height: 140,
-                            color: context.appColors.surfaceContainerHigh,
-                            child: Center(child: Icon(Icons.broken_image_outlined, color: context.appColors.onSurfaceVariant)),
+                            color: Colors.grey.shade200,
+                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
                           ),
                         ),
                       ),
@@ -805,7 +804,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _prosesIzin(item['id'], false),
-                          style: OutlinedButton.styleFrom(foregroundColor: context.appColors.error),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
                           child: const Text('Tolak'),
                         ),
                       ),
@@ -813,7 +812,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () => _prosesIzin(item['id'], true),
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.tertiaryContainer, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                           child: const Text('Setujui'),
                         ),
                       ),
@@ -865,7 +864,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                               '${namaHari[tanggal.weekday - 1]}, ${tanggal.day} ${namaBulan[tanggal.month]} ${tanggal.year}',
                             ),
                             trailing: IconButton(
-                              icon: Icon(Icons.delete_outline, color: context.appColors.error),
+                              icon: const Icon(Icons.delete_outline, color: Colors.red),
                               onPressed: () => _hapusHariLibur(item['id']),
                             ),
                           ),
@@ -915,7 +914,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                   if (item['jam_pulang_diajukan'] != null)
                     Text('Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}'),
                   const SizedBox(height: 4),
-                  Text(item['keterangan'] ?? '-', style: TextStyle(color: context.appColors.onSurfaceVariant)),
+                  Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
                   if (item['bukti_url'] != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
@@ -931,14 +930,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                             if (progress == null) return child;
                             return Container(
                               height: 140,
-                              color: context.appColors.surfaceContainerHigh,
+                              color: Colors.grey.shade200,
                               child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
                             );
                           },
                           errorBuilder: (context, error, stackTrace) => Container(
                             height: 140,
-                            color: context.appColors.surfaceContainerHigh,
-                            child: Center(child: Icon(Icons.broken_image_outlined, color: context.appColors.onSurfaceVariant)),
+                            color: Colors.grey.shade200,
+                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
                           ),
                         ),
                       ),
@@ -950,7 +949,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _prosesSusulan(item, false),
-                          style: OutlinedButton.styleFrom(foregroundColor: context.appColors.error),
+                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
                           child: const Text('Tolak'),
                         ),
                       ),
@@ -958,7 +957,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () => _prosesSusulan(item, true),
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.tertiaryContainer, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
                           child: const Text('Setujui'),
                         ),
                       ),

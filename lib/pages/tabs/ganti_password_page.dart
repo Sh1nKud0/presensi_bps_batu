@@ -58,7 +58,6 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Keamanan'),
-        backgroundColor: context.appColors.background,
         foregroundColor: context.appColors.onSurface,
         elevation: 0,
       ),
@@ -77,7 +76,6 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
               decoration: InputDecoration(
                 labelText: 'Password Baru',
                 prefixIcon: const Icon(Icons.lock_outline),
-                border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
                   onPressed: () => setState(() => _obscure = !_obscure),
@@ -96,7 +94,6 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
               decoration: const InputDecoration(
                 labelText: 'Konfirmasi Password Baru',
                 prefixIcon: Icon(Icons.lock_outline),
-                border: OutlineInputBorder(),
               ),
               validator: (v) {
                 if (v != _passwordBaruController.text) return 'Password tidak cocok';

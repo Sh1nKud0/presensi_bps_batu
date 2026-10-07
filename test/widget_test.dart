@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:presensi_bps_batu/main.dart';
 import 'package:presensi_bps_batu/pages/login_page.dart';
+import 'package:presensi_bps_batu/pages/tabs/beranda_tab.dart';
 import 'package:presensi_bps_batu/pages/register_page.dart';
 import 'package:presensi_bps_batu/theme/app_theme.dart';
 import 'package:presensi_bps_batu/theme/theme_controller.dart';
@@ -123,6 +124,25 @@ void main() {
   });
 
   for (final brightness in Brightness.values) {
+    testWidgets('Home greeting remains readable in ${brightness.name}', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildAppTheme(brightness: brightness),
+          home: Scaffold(body: BerandaTab(onAbsenTap: () {})),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final greeting = tester.widget<Text>(find.textContaining('Halo, '));
+      final context = tester.element(find.textContaining('Halo, '));
+      expect(
+        greeting.textSpan!.style!.color,
+        Theme.of(context).colorScheme.onSurface,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets(
       'Login validation and registration work in ${brightness.name}',
       (tester) async {

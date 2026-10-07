@@ -1,5 +1,7 @@
+import 'pembatalan_pulang_page.dart';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../services/attendance_requests.dart';
 import '../theme/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -9,7 +11,8 @@ import '../services/rekap_excel.dart';
 import '../main.dart';
 
 class AdminDashboardPage extends StatefulWidget {
-  const AdminDashboardPage({super.key});
+  final int initialTab;
+  const AdminDashboardPage({super.key, this.initialTab = 0}) : assert(initialTab >= 0 && initialTab < 6);
 
   @override
   State<AdminDashboardPage> createState() => _AdminDashboardPageState();
@@ -39,7 +42,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    _tabController = TabController(length: 6, vsync: this, initialIndex: widget.initialTab);
     _tabController.addListener(_saatTabBerubah);
     _ambilDataHariIni();
     _ambilRekapSemua();
@@ -155,6 +158,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   Future<void> _prosesIzin(String izinId, bool disetujui) async {
     try {
+      if (disetujui) {
+        final request = await supabase.from('izin').select()
+            .eq('id', izinId).single();
+        await AttendanceRequestsRepository(supabase).ensureNoAttendance(
+          request['user_id'] as String,
+          request['tanggal_mulai'] as String,
+          request['tanggal_selesai'] as String,
+        );
+      }
       await supabase.from('izin').update({
         'status_persetujuan': disetujui ? 'disetujui' : 'ditolak',
         'disetujui_oleh': supabase.auth.currentUser!.id,
@@ -323,6 +335,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         final jamPulangStr = item['jam_pulang_diajukan'] as String?;
         final jenisAlasan = item['jenis_alasan'] as String;
 
+        await AttendanceRequestsRepository(supabase)
+            .ensureNoAttendance(userId, tanggal, tanggal);
+
         DateTime? jamMasukUtc = jamMasukStr != null ? _gabungTanggalJam(tanggal, jamMasukStr) : null;
         DateTime? jamPulangUtc = jamPulangStr != null ? _gabungTanggalJam(tanggal, jamPulangStr) : null;
 
@@ -356,11 +371,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             'status': statusBaru ?? 'hadir',
           });
         } else {
-          await supabase.from('absensi').update({
-            if (jamMasukUtc != null) 'jam_masuk': jamMasukUtc.toIso8601String(),
-            if (jamPulangUtc != null) 'jam_pulang': jamPulangUtc.toIso8601String(),
-            if (statusBaru != null) 'status': statusBaru,
-          }).eq('id', existing['id']);
+          throw const AttendanceRequestConflict(
+            'Presensi sudah tercatat. Pengajuan susulan tidak dapat menimpanya.',
+          );
         }
       }
 
@@ -433,6 +446,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             Tab(text: 'Approval Izin'),
             Tab(text: 'Approval Susulan'),
             Tab(text: 'Hari Libur'),
+            Tab(text: 'Pembatalan Pulang'),
           ],
         ),
       ),
@@ -444,6 +458,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           _buildTabIzin(),
           _buildTabSusulan(),
           _buildTabHariLibur(),
+          const PembatalanPulangContent(isAdmin: true),
         ],
       ),
     );
@@ -615,6 +630,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int>(
+              isExpanded: true, isDense: false, itemHeight: null,
                       initialValue: _bulanRekap,
                       decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Bulan'),
                       items: List.generate(12, (i) => i + 1)
@@ -629,6 +645,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<int>(
+              isExpanded: true, isDense: false, itemHeight: null,
                       initialValue: _tahunRekap,
                       decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Tahun'),
                       items: List.generate(

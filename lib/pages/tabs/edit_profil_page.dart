@@ -83,7 +83,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profil'),
-        backgroundColor: context.appColors.background,
         foregroundColor: context.appColors.onSurface,
         elevation: 0,
       ),
@@ -99,7 +98,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Nama Lengkap',
                       prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.isEmpty) ? 'Nama tidak boleh kosong' : null,
                   ),
@@ -109,7 +107,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'NIM / NISN (opsional)',
                       prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -118,7 +115,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Asal Instansi / Kampus',
                       prefixIcon: Icon(Icons.school_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -128,7 +124,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Nomor HP',
                       prefixIcon: Icon(Icons.phone_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 24),

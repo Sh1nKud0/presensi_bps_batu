@@ -1,9 +1,12 @@
+import '../../widgets/adaptive_tiles.dart';
+import '../../widgets/glass_surface.dart';
 import 'package:flutter/material.dart';
 import '../../main.dart';
 import '../../theme/app_theme.dart';
 
 class RiwayatTab extends StatefulWidget {
-  const RiwayatTab({super.key});
+  final bool isActive;
+  const RiwayatTab({super.key, this.isActive = true});
 
   @override
   State<RiwayatTab> createState() => _RiwayatTabState();
@@ -39,6 +42,12 @@ class _RiwayatTabState extends State<RiwayatTab> {
   void initState() {
     super.initState();
     _muatData();
+  }
+
+  @override
+  void didUpdateWidget(covariant RiwayatTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) _muatData();
   }
 
   Future<void> _muatData() async {
@@ -92,6 +101,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
       mapIzin.forEach((tgl, data) => gabungan.add({'tipe': 'izin', 'tanggal': tgl, 'data': data}));
       gabungan.sort((a, b) => (b['tanggal'] as int).compareTo(a['tanggal'] as int));
 
+      if (!mounted) return;
       setState(() {
         _dataAbsensiPerTanggal = mapAbsensi;
         _dataIzinPerTanggal = mapIzin;
@@ -201,13 +211,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
           const SizedBox(height: 16),
 
           // Kontrol bulan
-          Container(
+          GlassSurface(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.appColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
-            ),
+            radius: 24,
             child: Row(
               children: [
                 _tombolBulan(Icons.chevron_left, () => _gantiBulan(-1)),
@@ -232,13 +238,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
               child: Center(child: CircularProgressIndicator()),
             )
           else
-            Container(
+            GlassSurface(
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.appColors.surfaceContainerLowest,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 8)],
-              ),
+              radius: 24,
               child: Column(
                 children: [
                   // Header hari
@@ -263,11 +265,11 @@ class _RiwayatTabState extends State<RiwayatTab> {
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 7,
                       mainAxisSpacing: 4,
                       crossAxisSpacing: 2,
-                      childAspectRatio: 0.8,
+                      mainAxisExtent: 38 + MediaQuery.textScalerOf(context).scale(16),
                     ),
                     itemCount: slotKosongDiAwal + jumlahHariBulan,
                     itemBuilder: (context, index) {
@@ -287,10 +289,10 @@ class _RiwayatTabState extends State<RiwayatTab> {
                             borderRadius: BorderRadius.circular(8),
                           ),
                           alignment: Alignment.center,
-                          child: Text(
+                          child: FittedBox(fit: BoxFit.scaleDown, child: Text(
                             '$tanggal',
                             style: TextStyle(color: context.appColors.error, fontWeight: FontWeight.w700, fontSize: 13),
-                          ),
+                          )),
                         );
                       }
 
@@ -303,10 +305,10 @@ class _RiwayatTabState extends State<RiwayatTab> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             alignment: Alignment.center,
-                            child: Text(
+                            child: FittedBox(fit: BoxFit.scaleDown, child: Text(
                               '$tanggal',
                               style: TextStyle(color: context.appColors.liburText, fontWeight: FontWeight.w700, fontSize: 13),
-                            ),
+                            )),
                           ),
                         );
                       }
@@ -319,14 +321,14 @@ class _RiwayatTabState extends State<RiwayatTab> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text(
+                            FittedBox(fit: BoxFit.scaleDown, child: Text(
                               '$tanggal',
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: isHariIni ? FontWeight.w700 : FontWeight.w500,
                                 color: isHariIni ? context.appColors.onPrimary : context.appColors.onSurface,
                               ),
-                            ),
+                            )),
                             const SizedBox(height: 2),
                             Container(
                               width: 6,
@@ -369,13 +371,8 @@ class _RiwayatTabState extends State<RiwayatTab> {
           const SizedBox(height: 16),
 
           // Statistik 2x2
-          GridView.count(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisCount: 2,
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: 2.6,
+          AdaptiveTiles(
+            minTileWidth: 152,
             children: [
               _kartuStat(Icons.check_circle, context.appColors.tertiaryContainer, 'Total Hadir', '$totalHadir', 'Hari'),
               _kartuStat(Icons.timer, context.appColors.izinText, 'Terlambat', '$totalTerlambat', 'Kali'),
@@ -388,7 +385,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
           // Aktivitas terbaru
           Row(
             children: [
-              Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16)),
+              Expanded(child: Text('Aktivitas Presensi Terakhir', style: AppText.headlineSm.copyWith(fontSize: 16))),
             ],
           ),
           const SizedBox(height: 8),
@@ -451,19 +448,15 @@ class _RiwayatTabState extends State<RiwayatTab> {
       children: [
         Container(width: 8, height: 8, decoration: BoxDecoration(shape: BoxShape.circle, color: color)),
         const SizedBox(width: 4),
-        Text(label, style: AppText.labelMd.copyWith(fontSize: 11)),
+        Flexible(child: Text(label, style: AppText.labelMd.copyWith(fontSize: 11))),
       ],
     );
   }
 
   Widget _kartuStat(IconData icon, Color color, String label, String value, String satuan) {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: context.appColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
-      ),
+      radius: 14,
       child: Row(
         children: [
           Container(
@@ -478,10 +471,9 @@ class _RiwayatTabState extends State<RiwayatTab> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(label, style: AppText.labelMd.copyWith(fontSize: 10), overflow: TextOverflow.ellipsis),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
+                Text(label, style: AppText.labelMd.copyWith(fontSize: 10)),
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(value, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: context.appColors.onSurface)),
                     const SizedBox(width: 4),
@@ -519,19 +511,14 @@ class _RiwayatTabState extends State<RiwayatTab> {
         }
       }
 
-      return Container(
+      return GlassSurface(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.appColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
-        ),
+        radius: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
+            AdaptiveTiles(minTileWidth: 120, children: [Row(children: [
                 Container(
                   width: 32, height: 32,
                   decoration: BoxDecoration(color: context.appColors.surfaceContainerHigh, shape: BoxShape.circle),
@@ -546,8 +533,7 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       Text('$tanggal ${namaBulan[_bulan]} $_tahun', style: AppText.labelMd.copyWith(fontSize: 11, color: context.appColors.onSurfaceVariant)),
                     ],
                   ),
-                ),
-                Container(
+                )]), Align(alignment: Alignment.centerLeft, child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: belumAbsen
@@ -579,14 +565,13 @@ class _RiwayatTabState extends State<RiwayatTab> {
                                   : context.appColors.hadirText,
                     ),
                   ),
-                ),
-              ],
-            ),
+                ))]),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(color: context.appColors.surfaceContainerLow.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(8)),
-              child: Row(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center, runSpacing: 8,
                 children: [
                   Icon(Icons.login, size: 16, color: terlambat ? context.appColors.izinText : context.appColors.tertiaryContainer),
                   const SizedBox(width: 6),
@@ -616,19 +601,14 @@ class _RiwayatTabState extends State<RiwayatTab> {
         badgeText = context.appColors.izinText;
       }
 
-      return Container(
+      return GlassSurface(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: context.appColors.surfaceContainerLowest,
-          borderRadius: BorderRadius.circular(14),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.03), blurRadius: 6)],
-        ),
+        radius: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
+            AdaptiveTiles(minTileWidth: 120, children: [Row(children: [
                 Container(
                   width: 32, height: 32,
                   decoration: BoxDecoration(color: context.appColors.surfaceContainerHigh, shape: BoxShape.circle),
@@ -643,22 +623,17 @@ class _RiwayatTabState extends State<RiwayatTab> {
                       Text(
                         data['keterangan'] ?? (data['jenis'] == 'sakit' ? 'Sakit' : 'Izin'),
                         style: AppText.labelMd.copyWith(fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
-                ),
-                Container(
+                )]), Align(alignment: Alignment.centerLeft, child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(color: badgeBg, borderRadius: BorderRadius.circular(999)),
                   child: Text(
                     status == 'disetujui' ? 'Disetujui' : status == 'ditolak' ? 'Ditolak' : 'Menunggu',
                     style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: badgeText),
                   ),
-                ),
-              ],
-            ),
+                ))]),
           ],
         ),
       );

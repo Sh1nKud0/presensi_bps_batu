@@ -1,3 +1,6 @@
+import 'adaptive_tiles.dart';
+import 'glass_surface.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -154,39 +157,33 @@ class _AttendanceMapCardState extends State<AttendanceMapCard> {
         ? '${(widget.distance! / 1000).toStringAsFixed(1)} km'
         : '${widget.distance!.toStringAsFixed(0)} m';
 
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: colors.surfaceVariant),
-      ),
-      clipBehavior: Clip.antiAlias,
+    return GlassSurface(
+      radius: 24,
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: AdaptiveTiles(
+              minTileWidth: 124,
+              spacing: 12,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Area presensi',
-                        style: AppText.bodyLg.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Area presensi',
+                      style: AppText.bodyLg.copyWith(
+                        fontWeight: FontWeight.w700,
                       ),
-                      Text(
-                        'BPS Kota Batu',
-                        style: AppText.bodyMd.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
+                    ),
+                    Text(
+                      'BPS Kota Batu',
+                      style: AppText.bodyMd.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 10,
@@ -277,21 +274,8 @@ class _AttendanceMapCardState extends State<AttendanceMapCard> {
                           height: 48,
                           child: Tooltip(
                             message: 'Kantor BPS Kota Batu',
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: colors.primary,
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: colors.surfaceContainerLowest,
-                                  width: 3,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.2),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
+                            child: GlassSurface(
+                              radius: 16,
                               child: Icon(
                                 Icons.account_balance_rounded,
                                 color: colors.onPrimary,
@@ -333,10 +317,9 @@ class _AttendanceMapCardState extends State<AttendanceMapCard> {
                 Positioned(
                   top: 12,
                   right: 12,
-                  child: Material(
-                    elevation: 3,
-                    color: colors.surfaceContainerLowest,
-                    borderRadius: BorderRadius.circular(16),
+                  child: GlassSurface(
+                    radius: 18,
+                    blur: true,
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -415,30 +398,30 @@ class _AttendanceMapCardState extends State<AttendanceMapCard> {
           ),
           Padding(
             padding: const EdgeInsets.all(16),
-            child: Row(
+            child: AdaptiveTiles(
+              minTileWidth: 124,
+              spacing: 12,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Jarak ke kantor',
+                      style: AppText.labelMd.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(distance, style: AppText.headlineSm),
+                    if (widget.accuracy != null)
                       Text(
-                        'Jarak ke kantor',
-                        style: AppText.labelMd.copyWith(
+                        'Akurasi GPS ±${widget.accuracy!.toStringAsFixed(0)} m',
+                        style: AppText.bodyMd.copyWith(
+                          fontSize: 11,
                           color: colors.onSurfaceVariant,
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      Text(distance, style: AppText.headlineSm),
-                      if (widget.accuracy != null)
-                        Text(
-                          'Akurasi GPS ±${widget.accuracy!.toStringAsFixed(0)} m',
-                          style: AppText.bodyMd.copyWith(
-                            fontSize: 11,
-                            color: colors.onSurfaceVariant,
-                          ),
-                        ),
-                    ],
-                  ),
+                  ],
                 ),
                 TextButton.icon(
                   onPressed: widget.refreshing ? null : widget.onRefresh,

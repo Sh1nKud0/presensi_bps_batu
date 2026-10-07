@@ -23,8 +23,14 @@ void main() {
     bool refreshing = false,
     VoidCallback? refresh,
     Brightness brightness = Brightness.light,
+    double textScale = 1,
   }) => MaterialApp(
     theme: buildAppTheme(brightness: brightness),
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context)
+          .copyWith(textScaler: TextScaler.linear(textScale)),
+      child: child!,
+    ),
     home: Scaffold(
       body: SingleChildScrollView(
         child: Center(
@@ -157,6 +163,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(camera.camera.visibleBounds.contains(next), isTrue);
       expect(camera.camera.visibleBounds.contains(office), isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+  testWidgets(
+    'Map details remain readable with 200% text and an out-of-range status',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await tester.pumpWidget(
+        app(
+          tiles: _LocalTiles(),
+          position: const LatLng(-7.87, 112.51),
+          distance: 750,
+          ready: true,
+          textScale: 2,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(Scrollable).first, const Offset(0, -350));
+      await tester.pumpAndSettle();
+      expect(find.text('Jarak ke kantor'), findsOneWidget);
+      expect(find.text('Perbarui'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );

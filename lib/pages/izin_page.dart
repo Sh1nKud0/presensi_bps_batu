@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import '../services/attendance_requests.dart';
 import '../theme/app_theme.dart';
-import 'package:image_picker/image_picker.dart';
+import '../widgets/evidence_picker.dart';
 import '../main.dart';
 
 class IzinPage extends StatefulWidget {
-  const IzinPage({super.key});
+  final int initialTab;
+  const IzinPage({super.key, this.initialTab = 0}) : assert(initialTab >= 0 && initialTab < 2);
 
   @override
   State<IzinPage> createState() => _IzinPageState();
@@ -17,7 +19,7 @@ class _IzinPageState extends State<IzinPage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
   }
 
   @override
@@ -96,14 +98,12 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
   }
 
   Future<void> _pilihBukti() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-    if (file != null) {
-      setState(() => _buktiFile = File(file.path));
-    }
+    final file = await pilihBukti(context);
+    if (file != null && mounted) setState(() => _buktiFile = File(file.path));
   }
 
   Future<void> _submit() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     if (_tanggalMulai == null || _tanggalSelesai == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -122,6 +122,11 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
 
     try {
       final userId = supabase.auth.currentUser!.id;
+      final start = _tanggalMulai!.toIso8601String().substring(0, 10);
+      final end = _tanggalSelesai!.toIso8601String().substring(0, 10);
+      final requests = AttendanceRequestsRepository(supabase);
+      await requests.ensureCanRequest(userId, start, end);
+      if (!mounted) return;
       String? buktiUrl;
 
       if (_buktiFile != null) {
@@ -130,10 +135,13 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
         buktiUrl = supabase.storage.from('bukti-izin').getPublicUrl(fileName);
       }
 
+      // Recheck after uploading evidence, before creating the request.
+      if (_buktiFile != null) await requests.ensureCanRequest(userId, start, end);
+      if (!mounted) return;
       await supabase.from('izin').insert({
         'user_id': userId,
-        'tanggal_mulai': _tanggalMulai!.toIso8601String().substring(0, 10),
-        'tanggal_selesai': _tanggalSelesai!.toIso8601String().substring(0, 10),
+        'tanggal_mulai': start,
+        'tanggal_selesai': end,
         'jenis': _jenis,
         'keterangan': _keteranganController.text.trim(),
         'bukti_url': buktiUrl,
@@ -174,101 +182,103 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Jenis', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Izin'),
-                  value: 'izin',
-                  groupValue: _jenis,
-                  onChanged: (v) => setState(() => _jenis = v!),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Sakit'),
-                  value: 'sakit',
-                  groupValue: _jenis,
-                  onChanged: (v) => setState(() => _jenis = v!),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pilihTanggal(isMulai: true),
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(_formatTanggal(_tanggalMulai)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text('s/d'),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pilihTanggal(isMulai: false),
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(_formatTanggal(_tanggalSelesai)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          TextFormField(
-            controller: _keteranganController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Keterangan',
-              hintText: 'Jelaskan alasan izin/sakit Anda',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Keterangan tidak boleh kosong';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-
-          OutlinedButton.icon(
-            onPressed: _pilihBukti,
-            icon: const Icon(Icons.attach_file),
-            label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
-          ),
-          if (_buktiFile != null) ...[
+      child: AbsorbPointer(
+        absorbing: _isLoading,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Jenis', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(_buktiFile!, height: 150),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text('Izin'),
+                    value: 'izin',
+                    groupValue: _jenis,
+                    onChanged: (v) => setState(() => _jenis = v!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text('Sakit'),
+                    value: 'sakit',
+                    groupValue: _jenis,
+                    onChanged: (v) => setState(() => _jenis = v!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pilihTanggal(isMulai: true),
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_formatTanggal(_tanggalMulai)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('s/d'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pilihTanggal(isMulai: false),
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_formatTanggal(_tanggalSelesai)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _keteranganController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Keterangan',
+                hintText: 'Jelaskan alasan izin/sakit Anda',
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Keterangan tidak boleh kosong';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _pilihBukti,
+              icon: const Icon(Icons.attach_file),
+              label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
+            ),
+            if (_buktiFile != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(_buktiFile!, height: 150),
+              ),
+            ],
+            const SizedBox(height: 24),
+
+            ElevatedButton(
+              onPressed: _isLoading ? null : _submit,
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Ajukan'),
             ),
           ],
-          const SizedBox(height: 24),
-
-          ElevatedButton(
-            onPressed: _isLoading ? null : _submit,
-            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Ajukan'),
-          ),
-        ],
+        ),
       ),
     );
   }

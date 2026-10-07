@@ -1,3 +1,6 @@
+import '../../widgets/adaptive_tiles.dart';
+import '../../widgets/glass_surface.dart';
+import '../pembatalan_pulang_page.dart';
 import 'package:flutter/material.dart';
 import '../../main.dart';
 import '../../theme/app_theme.dart';
@@ -77,13 +80,9 @@ class _ProfilTabState extends State<ProfilTab> {
           const SizedBox(height: 16),
 
           // Header profil
-          Container(
+          GlassSurface(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: context.appColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.appColors.surfaceVariant),
-            ),
+            radius: 24,
             child: Column(
               children: [
                 Container(
@@ -96,7 +95,7 @@ class _ProfilTabState extends State<ProfilTab> {
                   child: Icon(Icons.person, size: 44, color: context.appColors.primary),
                 ),
                 const SizedBox(height: 12),
-                Text(_nama, style: AppText.headlineSm),
+                Text(_nama, textAlign: TextAlign.center, style: AppText.headlineSm),
                 const SizedBox(height: 4),
                 Text(_isAdmin ? 'Admin / Pembimbing' : 'Peserta Magang', style: AppText.bodyMd.copyWith(color: context.appColors.secondary)),
                 if (_asalInstansi.isNotEmpty && _asalInstansi != '-') ...[
@@ -112,7 +111,7 @@ class _ProfilTabState extends State<ProfilTab> {
                       children: [
                         Icon(Icons.business, size: 16, color: context.appColors.primary),
                         const SizedBox(width: 6),
-                        Text(_asalInstansi, style: AppText.labelMd),
+                        Flexible(child: Text(_asalInstansi, style: AppText.labelMd)),
                       ],
                     ),
                   ),
@@ -123,37 +122,27 @@ class _ProfilTabState extends State<ProfilTab> {
           const SizedBox(height: 16),
 
           // Statistik bento
-          Row(
+          AdaptiveTiles(minTileWidth: 140,
             children: [
-              Expanded(
-                child: _statKartu(
+              _statKartu(
                   icon: Icons.check_circle,
                   iconColor: context.appColors.tertiaryContainer,
                   label: 'Hadir',
                   value: _totalHadir,
-                ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _statKartu(
+              _statKartu(
                   icon: Icons.pending_actions,
                   iconColor: context.appColors.secondary,
                   label: 'Izin/Sakit',
                   value: _totalIzin,
-                ),
               ),
             ],
           ),
           const SizedBox(height: 16),
 
           // Menu pengaturan
-          Container(
-            decoration: BoxDecoration(
-              color: context.appColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: context.appColors.surfaceVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
+          GlassSurface(
+            radius: 24,
             child: Column(
               children: [
                 _menuHeader('AKTIVITAS'),
@@ -166,6 +155,11 @@ class _ProfilTabState extends State<ProfilTab> {
                   icon: Icons.history_toggle_off,
                   label: 'Absen Susulan',
                   onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AbsenSusulanPage())),
+                ),
+                _menuItem(
+                  icon: Icons.undo,
+                  label: 'Pembatalan Absen Pulang',
+                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => PembatalanPulangPage(isAdmin: _isAdmin))),
                 ),
                 if (_isAdmin)
                   _menuItem(
@@ -217,13 +211,9 @@ class _ProfilTabState extends State<ProfilTab> {
   }
 
   Widget _statKartu({required IconData icon, required Color iconColor, required String label, required int value}) {
-    return Container(
+    return GlassSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: context.appColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: context.appColors.surfaceVariant),
-      ),
+      radius: 24,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -231,13 +221,12 @@ class _ProfilTabState extends State<ProfilTab> {
             children: [
               Icon(icon, color: iconColor, size: 20),
               const SizedBox(width: 6),
-              Text(label, style: AppText.labelMd),
+              Expanded(child: Text(label, style: AppText.labelMd)),
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('$value', style: AppText.displayLg),
               const SizedBox(width: 6),
@@ -275,13 +264,13 @@ class _ProfilTabState extends State<ProfilTab> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            Expanded(child: Row(
               children: [
                 Icon(icon, color: color ?? context.appColors.primary),
                 const SizedBox(width: 16),
-                Text(label, style: AppText.bodyLg.copyWith(color: color ?? context.appColors.onSurface)),
+                Expanded(child: Text(label, style: AppText.bodyLg.copyWith(color: color ?? context.appColors.onSurface))),
               ],
-            ),
+            )),
             if (color == null) Icon(Icons.chevron_right, color: context.appColors.outlineVariant),
           ],
         ),

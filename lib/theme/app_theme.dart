@@ -57,13 +57,13 @@ class AppPalette {
 }
 
 class AppColors {
-  static const primary = Color(0xFF00288E);
-  static const primaryContainer = Color(0xFF1E40AF);
+  static const primary = Color(0xFF1E40AF);
+  static const primaryContainer = Color(0xFF3158BF);
   static const onPrimary = Color(0xFFFFFFFF);
 
   static const secondary = Color(0xFF505F76);
   static const secondaryContainer = Color(0xFFD0E1FB);
-  static const onSecondaryContainer = Color(0xFF54647A);
+  static const onSecondaryContainer = Color(0xFF344763);
 
   static const tertiary = Color(0xFF003D27);
   static const tertiaryContainer = Color(0xFF00563A);
@@ -79,8 +79,8 @@ class AppColors {
   static const outline = Color(0xFF757684);
   static const outlineVariant = Color(0xFFC4C5D5);
 
-  static const onSurface = Color(0xFF191C1E);
-  static const onSurfaceVariant = Color(0xFF444653);
+  static const onSurface = Color(0xFF191C20);
+  static const onSurfaceVariant = Color(0xFF444B55);
 
   static const error = Color(0xFFBA1A1A);
   static const errorContainer = Color(0xFFFFDAD6);
@@ -168,19 +168,60 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   return ThemeData(
     useMaterial3: true,
     brightness: brightness,
-    scaffoldBackgroundColor: scheme.surface,
+    scaffoldBackgroundColor: Colors.transparent,
     colorScheme: scheme,
     appBarTheme: AppBarTheme(
-      backgroundColor: scheme.surface,
+      backgroundColor: scheme.surface.withValues(alpha: 0.88),
       foregroundColor: scheme.onSurface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      shape: Border(
+        bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
       systemOverlayStyle: isDark
           ? SystemUiOverlayStyle.light
           : SystemUiOverlayStyle.dark,
     ),
-    cardTheme: CardThemeData(color: scheme.surfaceContainerLowest),
+    cardTheme: CardThemeData(
+      color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.13) : Colors.white,
+        ),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surface.withValues(alpha: 0.94),
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      clipBehavior: Clip.antiAlias,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.98),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: scheme.surfaceContainerLow,
+      fillColor: scheme.surfaceContainerLowest.withValues(alpha: 0.65),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
     ),
     snackBarTheme: const SnackBarThemeData(
       backgroundColor: Color(0xFF323842),
@@ -190,6 +231,23 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       style: ElevatedButton.styleFrom(
         backgroundColor: scheme.primary,
         foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.38),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        side: BorderSide(color: scheme.outlineVariant),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
       ),
     ),
     fontFamily: 'Inter',

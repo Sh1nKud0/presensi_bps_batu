@@ -6,6 +6,7 @@ import 'pages/main_shell.dart';
 import 'notification_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
+import 'widgets/glass_surface.dart';
 
 final supabase = Supabase.instance.client;
 
@@ -37,6 +38,7 @@ class MyApp extends StatelessWidget {
         darkTheme: buildAppTheme(brightness: Brightness.dark),
         themeMode: mode,
         scrollBehavior: const _NoStretchScrollBehavior(),
+        builder: (context, child) => GlassBackground(child: child ?? const SizedBox.shrink()),
         home: const AuthGate(),
       ),
     );

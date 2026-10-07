@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import '../../services/attendance_requests.dart';
+import '../../widgets/evidence_picker.dart';
 import '../../main.dart';
 import '../../theme/app_theme.dart';
 
 class AbsenSusulanPage extends StatefulWidget {
-  const AbsenSusulanPage({super.key});
+  final int initialTab;
+  const AbsenSusulanPage({super.key, this.initialTab = 0}) : assert(initialTab >= 0 && initialTab < 2);
 
   @override
   State<AbsenSusulanPage> createState() => _AbsenSusulanPageState();
@@ -17,7 +19,7 @@ class _AbsenSusulanPageState extends State<AbsenSusulanPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
   }
 
   @override
@@ -31,7 +33,6 @@ class _AbsenSusulanPageState extends State<AbsenSusulanPage> with SingleTickerPr
     return Scaffold(
       appBar: AppBar(
         title: const Text('Absen Susulan'),
-        backgroundColor: context.appColors.background,
         foregroundColor: context.appColors.onSurface,
         elevation: 0,
         bottom: TabBar(
@@ -111,15 +112,15 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
   }
 
   Future<void> _pilihBukti() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-    if (file != null) setState(() => _buktiFile = File(file.path));
+    final file = await pilihBukti(context);
+    if (file != null && mounted) setState(() => _buktiFile = File(file.path));
   }
 
   String _formatTimeOfDay(TimeOfDay t) =>
       '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}:00';
 
   Future<void> _submit() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     if (_tanggal == null) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pilih tanggal terlebih dahulu')));
@@ -141,6 +142,11 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
     setState(() => _isLoading = true);
     try {
       final userId = supabase.auth.currentUser!.id;
+      final start = _tanggal!.toIso8601String().substring(0, 10);
+      final end = _tanggal!.toIso8601String().substring(0, 10);
+      final requests = AttendanceRequestsRepository(supabase);
+      await requests.ensureCanRequest(userId, start, end);
+      if (!mounted) return;
       String? buktiUrl;
 
       if (_buktiFile != null) {
@@ -149,9 +155,12 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
         buktiUrl = supabase.storage.from('bukti-susulan').getPublicUrl(fileName);
       }
 
+      // Recheck after uploading evidence, before creating the request.
+      if (_buktiFile != null) await requests.ensureCanRequest(userId, start, end);
+      if (!mounted) return;
       await supabase.from('absen_susulan').insert({
         'user_id': userId,
-        'tanggal': _tanggal!.toIso8601String().substring(0, 10),
+        'tanggal': start,
         'jam_masuk_diajukan': _isiMasuk ? _formatTimeOfDay(_jamMasuk!) : null,
         'jam_pulang_diajukan': _isiPulang ? _formatTimeOfDay(_jamPulang!) : null,
         'jenis_alasan': _jenisAlasan,
@@ -184,114 +193,117 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: context.appColors.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, color: context.appColors.primary, size: 18),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Gunakan ini kalau Anda sebenarnya hadir/bekerja tapi tidak bisa presensi normal (GPS error, dinas luar, dll). Bukan pengganti Izin/Sakit.',
-                    style: AppText.bodyMd.copyWith(fontSize: 12),
+      child: AbsorbPointer(
+        absorbing: _isLoading,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: context.appColors.secondaryContainer.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: context.appColors.primary, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Gunakan untuk tanggal ketika Anda hadir/bekerja tetapi belum memiliki presensi atau pengajuan aktif. Presensi yang sudah tercatat tidak dapat diubah melalui susulan.',
+                      style: AppText.bodyMd.copyWith(fontSize: 12),
+                    ),
                   ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            OutlinedButton.icon(
+              onPressed: _pilihTanggal,
+              icon: const Icon(Icons.calendar_today, size: 16),
+              label: Text(_tanggal == null ? 'Pilih Tanggal' : '${_tanggal!.day}/${_tanggal!.month}/${_tanggal!.year}'),
+            ),
+            const SizedBox(height: 16),
+
+            CheckboxListTile(
+              value: _isiMasuk,
+              onChanged: (v) => setState(() => _isiMasuk = v!),
+              title: const Text('Isi Jam Masuk'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            if (_isiMasuk)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () => _pilihJam(isMasuk: true),
+                  icon: const Icon(Icons.access_time, size: 16),
+                  label: Text(_jamMasuk == null ? 'Pilih Jam Masuk' : _jamMasuk!.format(context)),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          OutlinedButton.icon(
-            onPressed: _pilihTanggal,
-            icon: const Icon(Icons.calendar_today, size: 16),
-            label: Text(_tanggal == null ? 'Pilih Tanggal' : '${_tanggal!.day}/${_tanggal!.month}/${_tanggal!.year}'),
-          ),
-          const SizedBox(height: 16),
-
-          CheckboxListTile(
-            value: _isiMasuk,
-            onChanged: (v) => setState(() => _isiMasuk = v!),
-            title: const Text('Koreksi/Isi Jam Masuk'),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-          if (_isiMasuk)
-            Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 8),
-              child: OutlinedButton.icon(
-                onPressed: () => _pilihJam(isMasuk: true),
-                icon: const Icon(Icons.access_time, size: 16),
-                label: Text(_jamMasuk == null ? 'Pilih Jam Masuk' : _jamMasuk!.format(context)),
               ),
-            ),
 
-          CheckboxListTile(
-            value: _isiPulang,
-            onChanged: (v) => setState(() => _isiPulang = v!),
-            title: const Text('Koreksi/Isi Jam Pulang'),
-            contentPadding: EdgeInsets.zero,
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-          if (_isiPulang)
-            Padding(
-              padding: const EdgeInsets.only(left: 16, bottom: 8),
-              child: OutlinedButton.icon(
-                onPressed: () => _pilihJam(isMasuk: false),
-                icon: const Icon(Icons.access_time, size: 16),
-                label: Text(_jamPulang == null ? 'Pilih Jam Pulang' : _jamPulang!.format(context)),
+            CheckboxListTile(
+              value: _isiPulang,
+              onChanged: (v) => setState(() => _isiPulang = v!),
+              title: const Text('Isi Jam Pulang'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            if (_isiPulang)
+              Padding(
+                padding: const EdgeInsets.only(left: 16, bottom: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () => _pilihJam(isMasuk: false),
+                  icon: const Icon(Icons.access_time, size: 16),
+                  label: Text(_jamPulang == null ? 'Pilih Jam Pulang' : _jamPulang!.format(context)),
+                ),
               ),
-            ),
-          const SizedBox(height: 8),
-
-          DropdownButtonFormField<String>(
-            initialValue: _jenisAlasan,
-            decoration: const InputDecoration(labelText: 'Jenis Alasan', border: OutlineInputBorder()),
-            items: kLabelAlasan.entries
-                .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
-                .toList(),
-            onChanged: (v) => setState(() => _jenisAlasan = v!),
-          ),
-          const SizedBox(height: 16),
-
-          TextFormField(
-            controller: _keteranganController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Keterangan',
-              hintText: 'Jelaskan kronologi/alasan Anda',
-              border: OutlineInputBorder(),
-            ),
-            validator: (v) => (v == null || v.isEmpty) ? 'Keterangan tidak boleh kosong' : null,
-          ),
-          const SizedBox(height: 16),
-
-          OutlinedButton.icon(
-            onPressed: _pilihBukti,
-            icon: const Icon(Icons.attach_file),
-            label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
-          ),
-          if (_buktiFile != null) ...[
             const SizedBox(height: 8),
-            ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(_buktiFile!, height: 150)),
-          ],
-          const SizedBox(height: 24),
 
-          ElevatedButton(
-            onPressed: _isLoading ? null : _submit,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: context.appColors.primary,
-              foregroundColor: context.appColors.onPrimary,
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            DropdownButtonFormField<String>(
+              isExpanded: true, isDense: false, itemHeight: null,
+              initialValue: _jenisAlasan,
+              decoration: const InputDecoration(labelText: 'Jenis Alasan'),
+              items: kLabelAlasan.entries
+                  .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                  .toList(),
+              onChanged: (v) => setState(() => _jenisAlasan = v!),
             ),
-            child: _isLoading
-                ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary))
-                : const Text('Ajukan Absen Susulan'),
-          ),
-        ],
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _keteranganController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Keterangan',
+                hintText: 'Jelaskan kronologi/alasan Anda',
+              ),
+              validator: (v) => (v == null || v.isEmpty) ? 'Keterangan tidak boleh kosong' : null,
+            ),
+            const SizedBox(height: 16),
+
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _pilihBukti,
+              icon: const Icon(Icons.attach_file),
+              label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
+            ),
+            if (_buktiFile != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(borderRadius: BorderRadius.circular(8), child: Image.file(_buktiFile!, height: 150)),
+            ],
+            const SizedBox(height: 24),
+
+            ElevatedButton(
+              onPressed: _isLoading ? null : _submit,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: context.appColors.primary,
+                foregroundColor: context.appColors.onPrimary,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: _isLoading
+                  ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary))
+                  : const Text('Ajukan Absen Susulan'),
+            ),
+          ],
+        ),
       ),
     );
   }

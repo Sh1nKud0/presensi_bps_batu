@@ -1,11 +1,16 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:presensi_bps_batu/services/api_client.dart';
+import 'package:presensi_bps_batu/services/app_data.dart';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:presensi_bps_batu/services/checkout_cancellation.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   final today = DateTime.parse('2026-10-07T07:00:00Z');
   Map<String, dynamic> attendance(String checkout) => {
     'id': 'attendance-1',
@@ -71,80 +76,78 @@ void main() {
     expect(canCancelCheckout(row, now: today), isFalse);
   });
 
-  group('Cancellation requests use transactional database RPCs', () {
-    late HttpServer server;
-    late SupabaseClient client;
+  group('Cancellation requests use atomic backend decisions', () {
     late CheckoutCancellationRepository repository;
     late List<(String, Map<String, dynamic>)> calls;
     bool fail = false;
     setUp(() async {
+      FlutterSecureStorage.setMockInitialValues({});
       calls = [];
       fail = false;
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      server.listen((request) async {
-        final body = jsonDecode(
-          await utf8.decoder.bind(request).join(),
-        ) as Map<String, dynamic>;
-        calls.add((request.uri.path, body));
-        request.response.headers.contentType = ContentType.json;
-        if (fail) {
-          request.response.statusCode = 400;
-          request.response.write(
-            jsonEncode({'message': 'Pengajuan sudah diproses.'}),
+      final api = ApiClient(
+        'http://localhost:5010',
+        transport: MockClient((request) async {
+          if (request.url.path.endsWith('/login')) {
+            return http.Response(
+              jsonEncode({
+                'access_token': 'test-token',
+                'user': {'id': 'user-a'},
+              }),
+              200,
+            );
+          }
+          expect(request.headers['Authorization'], 'Bearer test-token');
+          calls.add((
+            request.url.path,
+            jsonDecode(request.body) as Map<String, dynamic>,
+          ));
+          return http.Response(
+            jsonEncode(
+              fail ? {'error': 'Pengajuan sudah diproses.'} : {'request': {}},
+            ),
+            fail ? 409 : 200,
           );
-        } else {
-          request.response.write('null');
-        }
-        await request.response.close();
-      });
-      client = SupabaseClient(
-        'http://127.0.0.1:${server.port}',
-        'test-key',
-        authOptions: const AuthClientOptions(autoRefreshToken: false),
+        }),
       );
-      repository = CheckoutCancellationRepository(client);
-    });
-    tearDown(() async {
-      await client.dispose();
-      await server.close(force: true);
+      await api.login('test@example.com', 'password');
+      repository = CheckoutCancellationRepository(data: AppData(client: api));
     });
     test('Submission sends attendance ID and reason, never clears attendance directly', () async {
       await repository.submit(
         'attendance-1',
         '  Tidak sengaja menekan tombol  ',
       );
-      expect(calls.single.$1, '/rest/v1/rpc/ajukan_pembatalan_pulang');
+      expect(calls.single.$1, '/api/requests/pembatalan');
       expect(calls.single.$2, {
-        'p_absensi_id': 'attendance-1',
-        'p_alasan': 'Tidak sengaja menekan tombol',
+        'absensi_id': 'attendance-1',
+        'alasan': 'Tidak sengaja menekan tombol',
       });
     });
     test(
-      'Approve and reject send distinct decisions to the same atomic RPC',
+      'Approve and reject use server decisions with a rejection reason',
       () async {
         await repository.process('request-1', true);
         await repository.process('request-2', false);
         expect(
-          calls.map((c) => c.$1),
-          everyElement('/rest/v1/rpc/proses_pembatalan_pulang'),
+          calls.first.$1,
+          '/api/admin/requests/pembatalan/request-1/decision',
         );
-        expect(calls.first.$2, {
-          'p_request_id': 'request-1',
-          'p_setujui': true,
-        });
-        expect(calls.last.$2, {
-          'p_request_id': 'request-2',
-          'p_setujui': false,
-        });
+        expect(
+          calls.last.$1,
+          '/api/admin/requests/pembatalan/request-2/decision',
+        );
+        expect(calls.first.$2, {'setujui': true});
+        expect(calls.last.$2['setujui'], false);
+        expect(calls.last.$2['alasan_penolakan'], isNotEmpty);
       },
     );
     test(
-      'Rejected RPC decisions propagate instead of reporting success',
+      'Conflicting decisions propagate instead of reporting success',
       () async {
         fail = true;
         await expectLater(
           repository.process('request-1', true),
-          throwsA(isA<PostgrestException>()),
+          throwsA(isA<ApiException>()),
         );
       },
     );

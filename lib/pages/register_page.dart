@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../main.dart';
 import '../theme/app_theme.dart';
 
@@ -34,17 +34,15 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {
-          'nama_lengkap': _namaController.text.trim(),
-        },
+      await appData.register(
+        _emailController.text,
+        _passwordController.text,
+        _namaController.text,
       );
 
       if (!mounted) return;
 
-      if (response.user != null) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Registrasi berhasil! Silakan login.'),
@@ -53,16 +51,10 @@ class _RegisterPageState extends State<RegisterPage> {
         );
         Navigator.of(context).pop(); // kembali ke halaman login
       }
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal daftar: ${e.message}')),
-      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Terjadi kesalahan: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Terjadi kesalahan: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -134,8 +126,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     if (value == null || value.isEmpty) {
                       return 'Password tidak boleh kosong';
                     }
-                    if (value.length < 6) {
-                      return 'Password minimal 6 karakter';
+                    if (value.length < 8) {
+                      return 'Password minimal 8 karakter';
                     }
                     return null;
                   },

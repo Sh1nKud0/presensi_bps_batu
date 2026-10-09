@@ -4,11 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
 
-import 'package:supabase_flutter/supabase_flutter.dart';
-
-import '../main.dart'; // untuk akses variabel 'supabase'
+import '../main.dart';
 import 'register_page.dart';
-import 'main_shell.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -37,21 +34,12 @@ class _LoginPageState extends State<LoginPage> {
     setState(() => _isLoading = true);
 
     try {
-      await supabase.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      await appData.login(
+        _emailController.text.trim(),
+        _passwordController.text,
       );
 
       if (!mounted) return;
-
-      // Login berhasil, arahkan ke MainShell
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (context) => const MainShell()),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Gagal login: ${e.message}')));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)

@@ -36,8 +36,7 @@ class _EditProfilPageState extends State<EditProfilPage> {
 
   Future<void> _muatProfil() async {
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final profile = await supabase.from('profiles').select().eq('id', userId).single();
+      final profile = await appData.profile();
 
       _namaController.text = profile['nama_lengkap'] ?? '';
       _noHpController.text = profile['no_hp'] ?? '';
@@ -55,13 +54,12 @@ class _EditProfilPageState extends State<EditProfilPage> {
 
     setState(() => _saving = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      await supabase.from('profiles').update({
+      await appData.updateProfile({
         'nama_lengkap': _namaController.text.trim(),
         'no_hp': _noHpController.text.trim(),
         'asal_instansi': _asalInstansiController.text.trim(),
         'nim': _nimController.text.trim(),
-      }).eq('id', userId);
+      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

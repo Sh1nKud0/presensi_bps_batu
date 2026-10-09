@@ -57,10 +57,10 @@ class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
     _refreshing = true;
     setState(() => _loading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final userId = appData.userId!;
 
       if (!_profileLoaded) {
-        final profile = await supabase.from('profiles').select('nama_lengkap, role').eq('id', userId).single();
+        final profile = await appData.profile();
         if (!mounted) return;
         setState(() {
           _profileLoaded = true;
@@ -69,7 +69,7 @@ class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
         });
       }
 
-      final daily = await DailyAttendanceRepository(supabase).load(userId);
+      final daily = await DailyAttendanceRepository().load(userId);
       if (!mounted) return;
       setState(() {
         _daily = daily;
@@ -144,10 +144,10 @@ class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
                   style: AppText.headlineMdMobile.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
-              if (_profileLoaded && supabase.auth.currentUser != null)
+              if (_profileLoaded && appData.loggedIn)
                 RequestNotificationsButton(
-                  key: ValueKey('${supabase.auth.currentUser!.id}/$_isAdmin'),
-                  userId: supabase.auth.currentUser!.id,
+                  key: ValueKey('${appData.userId!}/$_isAdmin'),
+                  userId: appData.userId!,
                   isAdmin: _isAdmin,
                 )
               else

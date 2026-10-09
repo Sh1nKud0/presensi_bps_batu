@@ -1,7 +1,6 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'daily_attendance.dart';
 import 'rekap_presensi.dart';
+import 'app_data.dart';
 
 bool canCancelCheckout(
   Map<String, dynamic>? attendance, {
@@ -23,44 +22,27 @@ bool canCancelCheckout(
 }
 
 class CheckoutCancellationRepository {
-  final SupabaseClient client;
-  const CheckoutCancellationRepository(this.client);
+  final AppData data;
+  CheckoutCancellationRepository({AppData? data}) : data = data ?? appData;
 
-  Future<List<Map<String, dynamic>>> load(String userId, bool isAdmin) async {
-    var query = client
-        .from('pembatalan_pulang')
-        .select(
-          isAdmin
-              ? '*, profiles!pembatalan_pulang_user_id_fkey(nama_lengkap)'
-              : '*',
-        );
-    query = isAdmin
-        ? query.eq('status_persetujuan', 'menunggu')
-        : query.eq('user_id', userId);
-    final result = <Map<String, dynamic>>[];
-    var offset = 0;
-    while (true) {
-      final page = await query
-          .order('created_at', ascending: false)
-          .order('id')
-          .range(offset, offset + 199);
-      result.addAll(page);
-      if (page.length < 200) return result;
-      offset += page.length;
-    }
-  }
-
+  Future<List<Map<String, dynamic>>> load(String userId, bool isAdmin) =>
+      data.requests(
+        'pembatalan',
+        admin: isAdmin,
+        status: isAdmin ? 'menunggu' : null,
+      );
   Future<void> submit(String attendanceId, String reason) async {
-    await client.rpc(
-      'ajukan_pembatalan_pulang',
-      params: {'p_absensi_id': attendanceId, 'p_alasan': reason.trim()},
+    await data.api.json(
+      'POST',
+      '/api/requests/pembatalan',
+      body: {'absensi_id': attendanceId, 'alasan': reason.trim()},
     );
   }
 
-  Future<void> process(String requestId, bool approve) async {
-    await client.rpc(
-      'proses_pembatalan_pulang',
-      params: {'p_request_id': requestId, 'p_setujui': approve},
-    );
-  }
+  Future<void> process(String requestId, bool approve) => data.decide(
+    'pembatalan',
+    requestId,
+    approve,
+    reason: approve ? null : 'Pembatalan jam pulang tidak disetujui admin.',
+  );
 }

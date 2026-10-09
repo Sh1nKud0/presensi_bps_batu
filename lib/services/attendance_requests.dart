@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'app_data.dart';
 
 class AttendanceRequestConflict implements Exception {
   final String message;
@@ -7,24 +7,17 @@ class AttendanceRequestConflict implements Exception {
   String toString() => message;
 }
 
-/// One attendance record or active request per date. Rejected requests may retry.
+/// UI preflight only. The backend rechecks conflicts inside the write transaction.
 class AttendanceRequestsRepository {
-  final SupabaseClient client;
-  const AttendanceRequestsRepository(this.client);
+  final AppData data;
+  AttendanceRequestsRepository({AppData? data}) : data = data ?? appData;
 
   Future<void> ensureNoAttendance(
     String userId,
     String start,
     String end,
   ) async {
-    final rows = await client
-        .from('absensi')
-        .select('tanggal')
-        .eq('user_id', userId)
-        .gte('tanggal', start)
-        .lte('tanggal', end)
-        .order('tanggal')
-        .limit(1);
+    final rows = await data.history(start, end);
     if (rows.isNotEmpty) {
       final date = DateTime.parse(rows.first['tanggal'] as String);
       throw AttendanceRequestConflict(
@@ -36,29 +29,20 @@ class AttendanceRequestsRepository {
 
   Future<void> ensureCanRequest(String userId, String start, String end) async {
     await ensureNoAttendance(userId, start, end);
-    final rows = await Future.wait([
-      client
-          .from('izin')
-          .select('id')
-          .eq('user_id', userId)
-          .lte('tanggal_mulai', end)
-          .gte('tanggal_selesai', start)
-          .inFilter('status_persetujuan', ['menunggu', 'disetujui'])
-          .limit(1),
-      client
-          .from('absen_susulan')
-          .select('id')
-          .eq('user_id', userId)
-          .gte('tanggal', start)
-          .lte('tanggal', end)
-          .inFilter('status_persetujuan', ['menunggu', 'disetujui'])
-          .limit(1),
+    final requests = await Future.wait([
+      data.requests('izin'),
+      data.requests('susulan'),
     ]);
-    if (rows.any((items) => items.isNotEmpty)) {
-      throw const AttendanceRequestConflict(
-        'Tanggal yang dipilih sudah memiliki pengajuan izin/sakit atau susulan '
-        'yang menunggu atau disetujui. Pengajuan tidak dapat ditumpuk.',
-      );
+    for (final row in requests.expand((items) => items)) {
+      final first = (row['tanggal_mulai'] ?? row['tanggal']) as String;
+      final last = (row['tanggal_selesai'] ?? row['tanggal']) as String;
+      if (['menunggu', 'disetujui'].contains(row['status_persetujuan']) &&
+          first.compareTo(end) <= 0 &&
+          last.compareTo(start) >= 0) {
+        throw const AttendanceRequestConflict(
+          'Tanggal ini sudah memiliki pengajuan aktif.',
+        );
+      }
     }
   }
 }

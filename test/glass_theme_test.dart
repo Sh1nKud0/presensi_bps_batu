@@ -1,4 +1,4 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:presensi_bps_batu/pages/admin_dashboard_page.dart';
 import 'package:presensi_bps_batu/pages/izin_page.dart';
 import 'package:presensi_bps_batu/pages/tabs/absen_susulan_page.dart';
@@ -12,29 +12,8 @@ import 'package:presensi_bps_batu/theme/app_theme.dart';
 import 'package:presensi_bps_batu/widgets/glass_surface.dart';
 import 'package:presensi_bps_batu/widgets/glass_bottom_navigation.dart';
 
-class _TestAuthStorage extends GotrueAsyncStorage {
-  @override
-  Future<String?> getItem({required String key}) async => null;
-  @override
-  Future<void> setItem({required String key, required String value}) async {}
-  @override
-  Future<void> removeItem({required String key}) async {}
-}
-
 void main() {
-  setUpAll(() async {
-    await Supabase.initialize(
-      url: 'https://example.supabase.co',
-      publishableKey: 'test-key',
-      authOptions: FlutterAuthClientOptions(
-        pkceAsyncStorage: _TestAuthStorage(),
-        persistSession: false,
-        autoRefreshToken: false,
-        detectSessionInUri: false,
-      ),
-    );
-  });
-  tearDownAll(() => Supabase.instance.dispose());
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   for (final brightness in Brightness.values) {
     testWidgets(
       'Glass navigation keeps all destinations usable on a narrow screen in ${brightness.name}',

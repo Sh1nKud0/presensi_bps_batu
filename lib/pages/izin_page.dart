@@ -121,32 +121,16 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
     setState(() => _isLoading = true);
 
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final userId = appData.userId!;
       final start = _tanggalMulai!.toIso8601String().substring(0, 10);
       final end = _tanggalSelesai!.toIso8601String().substring(0, 10);
-      final requests = AttendanceRequestsRepository(supabase);
+      final requests = AttendanceRequestsRepository();
       await requests.ensureCanRequest(userId, start, end);
       if (!mounted) return;
-      String? buktiUrl;
-
-      if (_buktiFile != null) {
-        final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
-        await supabase.storage.from('bukti-izin').upload(fileName, _buktiFile!);
-        buktiUrl = supabase.storage.from('bukti-izin').getPublicUrl(fileName);
-      }
-
-      // Recheck after uploading evidence, before creating the request.
-      if (_buktiFile != null) await requests.ensureCanRequest(userId, start, end);
-      if (!mounted) return;
-      await supabase.from('izin').insert({
-        'user_id': userId,
-        'tanggal_mulai': start,
-        'tanggal_selesai': end,
-        'jenis': _jenis,
-        'keterangan': _keteranganController.text.trim(),
-        'bukti_url': buktiUrl,
-        'status_persetujuan': 'menunggu',
-      });
+      await appData.submitRequest('izin', {
+        'tanggal_mulai': start, 'tanggal_selesai': end,
+        'jenis': _jenis, 'keterangan': _keteranganController.text.trim(),
+      }, _buktiFile);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -307,12 +291,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
   Future<void> _ambilRiwayat() async {
     setState(() => _isLoading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final response = await supabase
-          .from('izin')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      final response = await appData.requests('izin');
 
       setState(() => _riwayat = List<Map<String, dynamic>>.from(response));
     } catch (e) {

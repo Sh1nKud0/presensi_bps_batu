@@ -1,0 +1,18 @@
+import { readConfig } from '../src/config.js';
+import { createDatabase } from '../src/database.js';
+
+let database;
+try {
+  database = createDatabase(readConfig().database);
+  const result = await database.query(`
+    SELECT current_database() AS database, current_user AS pengguna,
+           to_char(now() AT TIME ZONE 'Asia/Jakarta', 'YYYY-MM-DD HH24:MI:SS') AS waktu_wib
+  `);
+  console.table(result.rows);
+  console.log('Koneksi berhasil. Tidak ada tabel atau data yang diubah.');
+} catch {
+  console.error('Pemeriksaan gagal. Periksa backend/.env dan pastikan tunnel SSH aktif.');
+  process.exitCode = 1;
+} finally {
+  if (database) await database.end();
+}

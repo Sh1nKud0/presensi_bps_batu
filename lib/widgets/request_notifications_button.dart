@@ -76,13 +76,15 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
     _loading = true;
     try {
       final data =
-          await (widget.repository ?? RequestNotificationsRepository(supabase))
+          await (widget.repository ?? RequestNotificationsRepository())
               .load(widget.userId, widget.isAdmin);
       final preferences = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
         _items = data;
-        _read = (preferences.getStringList(_storageKey) ?? []).toSet();
+        _read = widget.repository == null
+          ? data.where((item) => item.read).map((item) => item.readKey).toSet()
+          : (preferences.getStringList(_storageKey) ?? []).toSet();
         _error = null;
       });
       _revision.value++;
@@ -101,6 +103,16 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
   Future<bool> _markRead(Iterable<RequestNotification> items) async {
     final updated = {..._read, ...items.map((item) => item.readKey)};
     try {
+      if (widget.repository == null) {
+        final ids = items.map((item) => item.notificationId).whereType<String>().toList();
+        for (var offset = 0; offset < ids.length; offset += 100) {
+          await appData.api.json('PATCH', '/api/notifications/read', body: {
+            'ids': ids.sublist(offset, (offset + 100).clamp(0, ids.length)),
+          });
+        }
+        if (mounted) { setState(() => _read = updated); _revision.value++; }
+        return true;
+      }
       final preferences = await SharedPreferences.getInstance();
       final saved = await preferences.setStringList(
         _storageKey,

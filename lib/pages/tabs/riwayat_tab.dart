@@ -53,29 +53,15 @@ class _RiwayatTabState extends State<RiwayatTab> {
   Future<void> _muatData() async {
     setState(() => _loading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
       final awal = DateTime(_tahun, _bulan, 1).toIso8601String().substring(0, 10);
       final akhir = DateTime(_tahun, _bulan + 1, 0).toIso8601String().substring(0, 10);
 
-      final absensi = await supabase
-          .from('absensi')
-          .select()
-          .eq('user_id', userId)
-          .gte('tanggal', awal)
-          .lte('tanggal', akhir);
-
-      final izin = await supabase
-          .from('izin')
-          .select()
-          .eq('user_id', userId)
-          .gte('tanggal_mulai', awal)
-          .lte('tanggal_mulai', akhir);
-
-      final hariLibur = await supabase
-          .from('hari_libur')
-          .select()
-          .gte('tanggal', awal)
-          .lte('tanggal', akhir);
+      final absensi = await appData.history(awal, akhir);
+      final izin = (await appData.requests('izin')).where((r) =>
+        r['status_persetujuan'] == 'disetujui' &&
+        (r['tanggal_mulai'] as String).compareTo(akhir) <= 0 &&
+        (r['tanggal_selesai'] as String).compareTo(awal) >= 0).toList();
+      final hariLibur = await appData.holidays(start: awal, end: akhir);
 
       final mapHariLibur = <int, String>{};
       for (final h in hariLibur) {
@@ -91,8 +77,12 @@ class _RiwayatTabState extends State<RiwayatTab> {
 
       final mapIzin = <int, Map<String, dynamic>>{};
       for (final i in izin) {
-        final tgl = DateTime.parse(i['tanggal_mulai'].toString()).day;
-        mapIzin[tgl] = i;
+        var day = DateTime.parse(i['tanggal_mulai'] as String);
+        final last = DateTime.parse(i['tanggal_selesai'] as String);
+        while (!day.isAfter(last)) {
+          if (day.year == _tahun && day.month == _bulan) mapIzin[day.day] = i;
+          day = day.add(const Duration(days: 1));
+        }
       }
 
       // Gabungkan untuk daftar aktivitas terbaru, urutkan tanggal desc

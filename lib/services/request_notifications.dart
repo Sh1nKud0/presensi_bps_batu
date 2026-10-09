@@ -1,6 +1,5 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
-
 import 'rekap_presensi.dart';
+import 'app_data.dart';
 
 List<RequestNotification> filterNotificationsByDay(
   List<RequestNotification> items,
@@ -21,6 +20,8 @@ class RequestNotification {
   final String title;
   final String message;
   final DateTime createdAt;
+  final String? notificationId;
+  final bool read;
 
   const RequestNotification({
     required this.id,
@@ -29,8 +30,10 @@ class RequestNotification {
     required this.title,
     required this.message,
     required this.createdAt,
+    this.notificationId,
+    this.read = false,
   });
-  String get readKey => '$table/$id/$status';
+  String get readKey => notificationId ?? '$table/$id/$status';
 }
 
 List<RequestNotification> buildRequestNotifications({
@@ -88,59 +91,31 @@ abstract interface class RequestNotificationsSource {
 }
 
 class RequestNotificationsRepository implements RequestNotificationsSource {
-  final SupabaseClient client;
-  const RequestNotificationsRepository(this.client);
-
+  final AppData data;
+  RequestNotificationsRepository({AppData? data}) : data = data ?? appData;
   @override
   Future<List<RequestNotification>> load(String userId, bool isAdmin) async {
-    Future<List<Map<String, dynamic>>> fetch(String table) async {
-      final rows = <Map<String, dynamic>>[];
-      var offset = 0;
-      while (true) {
-        var query = client
-            .from(table)
-            .select(
-              isAdmin ? '*, profiles!${table}_user_id_fkey(nama_lengkap)' : '*',
-            );
-        query = isAdmin
-            ? query.eq('status_persetujuan', 'menunggu')
-            : query.eq('user_id', userId).inFilter('status_persetujuan', [
-                'disetujui',
-                'ditolak',
-              ]);
-        final page = await query
-            .order('created_at', ascending: false)
-            .order('id')
-            .range(offset, offset + 499);
-        rows.addAll(page);
-        if (page.length < 500) return rows;
-        offset += page.length;
-      }
-    }
-
-    Future<List<Map<String, dynamic>>> fetchCancellation() async {
-      try {
-        return await fetch('pembatalan_pulang');
-      } on PostgrestException catch (e) {
-        // Keep existing notifications usable while the new migration is pending.
-        if (e.code == '42P01' || e.code == 'PGRST205') return [];
-        rethrow;
-      }
-    }
-
-    final data = await Future.wait([
-      fetch('izin'),
-      fetch('absen_susulan'),
-      fetchCancellation(),
-    ]);
-    return buildRequestNotifications(
-      userId: userId,
-      isAdmin: isAdmin,
-      records: {
-        'izin': data[0],
-        'absen_susulan': data[1],
-        'pembatalan_pulang': data[2],
-      },
-    );
+    final rows = await data.api.all('/api/notifications', 'notifications');
+    return rows
+        .map(
+          (row) => RequestNotification(
+            id: row['request_id'] as String,
+            notificationId: row['id'] as String,
+            table:
+                {
+                  'susulan': 'absen_susulan',
+                  'pembatalan': 'pembatalan_pulang',
+                }[row['jenis']] ??
+                'izin',
+            status: row['status'] as String,
+            title: row['title'] as String,
+            message: row['status'] == 'menunggu'
+                ? 'Menunggu persetujuan admin.'
+                : 'Pengajuan Anda telah ${row['status']} oleh admin.',
+            createdAt: DateTime.parse(row['created_at'] as String),
+            read: row['read_at'] != null,
+          ),
+        )
+        .toList();
   }
 }

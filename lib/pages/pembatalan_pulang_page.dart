@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
 import '../services/checkout_cancellation.dart';
 import '../services/daily_attendance.dart';
 import '../services/rekap_presensi.dart';
+import '../services/api_client.dart';
 
 class PembatalanPulangPage extends StatelessWidget {
   final bool isAdmin;
@@ -35,7 +35,7 @@ class _PembatalanPulangContentState extends State<PembatalanPulangContent> {
   bool _hasActiveRequest = false;
   List<Map<String, dynamic>> _requests = [];
   CheckoutCancellationRepository get _repository =>
-      CheckoutCancellationRepository(supabase);
+      CheckoutCancellationRepository();
 
   @override
   void initState() {
@@ -49,7 +49,7 @@ class _PembatalanPulangContentState extends State<PembatalanPulangContent> {
     super.dispose();
   }
 
-  String _message(Object error) => error is PostgrestException
+  String _message(Object error) => error is ApiException
       ? error.message
       : 'Tidak dapat terhubung. Silakan coba lagi.';
 
@@ -61,11 +61,11 @@ class _PembatalanPulangContentState extends State<PembatalanPulangContent> {
       _error = null;
     });
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final userId = appData.userId!;
       final requests = await _repository.load(userId, widget.isAdmin);
       final daily = widget.isAdmin
           ? null
-          : await DailyAttendanceRepository(supabase).load(userId);
+          : await DailyAttendanceRepository().load(userId);
       if (!mounted) return;
       setState(() {
         _requests = requests;

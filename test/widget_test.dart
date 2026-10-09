@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:presensi_bps_batu/main.dart';
 import 'package:presensi_bps_batu/pages/login_page.dart';
 import 'package:presensi_bps_batu/pages/tabs/beranda_tab.dart';
@@ -10,37 +10,9 @@ import 'package:presensi_bps_batu/theme/app_theme.dart';
 import 'package:presensi_bps_batu/theme/theme_controller.dart';
 import 'package:presensi_bps_batu/widgets/theme_switch_tile.dart';
 
-class _MemoryAuthStorage extends GotrueAsyncStorage {
-  final _values = <String, String>{};
-  @override
-  Future<String?> getItem({required String key}) async => _values[key];
-  @override
-  Future<void> setItem({required String key, required String value}) async {
-    _values[key] = value;
-  }
-
-  @override
-  Future<void> removeItem({required String key}) async {
-    _values.remove(key);
-  }
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-  setUpAll(() async {
-    // Theme tests do not use a live backend or storage plugins.
-    await Supabase.initialize(
-      url: 'https://example.supabase.co',
-      publishableKey: 'test-key',
-      authOptions: FlutterAuthClientOptions(
-        pkceAsyncStorage: _MemoryAuthStorage(),
-        autoRefreshToken: false,
-        persistSession: false,
-        detectSessionInUri: false,
-      ),
-    );
-  });
-  tearDownAll(() => Supabase.instance.dispose());
+  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await appThemeController.load();

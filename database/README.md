@@ -1,25 +1,15 @@
-# Pembatalan absen pulang
+# Arsip skema Supabase
 
-Jalankan isi `20261007_pembatalan_pulang.sql` sekali di **Supabase → SQL Editor**
-pada database aplikasi yang sudah memiliki skema presensi sebelumnya.
-Skrip berada dalam transaksi; jangan menjalankan ulang skema awal proyek.
+Folder ini menyimpan migrasi lama sebagai referensi historis. Aplikasi sekarang
+hanya menggunakan backend PostgreSQL BPS dan tidak menjalankan skrip di folder ini.
+`schema_presensi_bps_batu.sql` di root project juga merupakan skema Supabase lama.
 
-Aturan:
-- Hanya pemilik presensi yang bisa mengajukan pembatalan dengan alasan.
-- Jam pulang harus tercatat sebelum 16.00 WIB, untuk tanggal hari ini.
-- Izin/susulan aktif tidak dapat dibatalkan melalui alur ini.
-- Hanya satu pengajuan menunggu per presensi. Penolakan tidak mengubah presensi.
-- Admin harus menyetujui pada hari yang sama; pengajuan kedaluwarsa dapat ditolak.
-- Persetujuan mengunci baris, memeriksa jam pulang asli, mengosongkan jam/lokasi/foto
-  pulang, dan menyimpan keputusan dalam satu transaksi. Jam masuk tetap tersimpan.
-- User tidak dapat mengubah jam pulang yang sudah tercatat lewat update API langsung.
+Skema aktif tersedia di [backend/migrations](../backend/migrations), dengan panduan
+[backend/README.md](../backend/README.md). Gunakan `npm run db:migrate` untuk migrasi
+backend. Database BPS yang sudah dipakai tidak perlu dibuat ulang.
 
-Pemeriksaan setelah migrasi, dengan akun peserta dan admin yang berbeda:
-1. Presensi peserta dengan jam pulang sebelum 16.00 WIB: ajukan pembatalan.
-2. Pastikan pengajuan kedua ditolak dan peserta lain tidak dapat membaca pengajuannya.
-3. Tolak pengajuan di admin: jam pulang tetap tersimpan dan hasil muncul di notifikasi peserta.
-4. Ajukan kembali, setujui: jam masuk tetap, jam pulang kosong, peserta bisa absen pulang kembali.
-5. Pastikan proses ulang keputusan ditolak dan jam pulang pukul 16.00 WIB ke atas tidak memenuhi syarat.
-
-Pengujian Dart memakai server tiruan untuk batas waktu dan pemanggilan RPC;
-pengujian tersebut tidak mengeksekusi fungsi PostgreSQL pada Supabase.
+Aturan pembatalan jam pulang sekarang diterapkan oleh backend dalam transaksi:
+pengajuan pada tanggal yang sama, jam pulang tercatat sebelum 16.00 WIB,
+persetujuan admin mengosongkan data pulang dan mempertahankan jam masuk.
+Pengujian ada di `backend/test/extensions.integration.test.js` dan
+`test/checkout_cancellation_test.dart`.

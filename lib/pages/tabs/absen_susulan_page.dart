@@ -126,8 +126,8 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pilih tanggal terlebih dahulu')));
       return;
     }
-    if (!_isiMasuk && !_isiPulang) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Pilih minimal salah satu: jam masuk atau pulang')));
+    if (!_isiMasuk || _jamMasuk == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Jam masuk wajib diisi untuk absen susulan')));
       return;
     }
     if (_isiMasuk && _jamMasuk == null) {
@@ -141,33 +141,18 @@ class _FormAjukanSusulanState extends State<_FormAjukanSusulan> {
 
     setState(() => _isLoading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
+      final userId = appData.userId!;
       final start = _tanggal!.toIso8601String().substring(0, 10);
       final end = _tanggal!.toIso8601String().substring(0, 10);
-      final requests = AttendanceRequestsRepository(supabase);
+      final requests = AttendanceRequestsRepository();
       await requests.ensureCanRequest(userId, start, end);
       if (!mounted) return;
-      String? buktiUrl;
-
-      if (_buktiFile != null) {
-        final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
-        await supabase.storage.from('bukti-susulan').upload(fileName, _buktiFile!);
-        buktiUrl = supabase.storage.from('bukti-susulan').getPublicUrl(fileName);
-      }
-
-      // Recheck after uploading evidence, before creating the request.
-      if (_buktiFile != null) await requests.ensureCanRequest(userId, start, end);
-      if (!mounted) return;
-      await supabase.from('absen_susulan').insert({
-        'user_id': userId,
+      await appData.submitRequest('susulan', {
         'tanggal': start,
         'jam_masuk_diajukan': _isiMasuk ? _formatTimeOfDay(_jamMasuk!) : null,
         'jam_pulang_diajukan': _isiPulang ? _formatTimeOfDay(_jamPulang!) : null,
-        'jenis_alasan': _jenisAlasan,
-        'keterangan': _keteranganController.text.trim(),
-        'bukti_url': buktiUrl,
-        'status_persetujuan': 'menunggu',
-      });
+        'jenis_alasan': _jenisAlasan, 'keterangan': _keteranganController.text.trim(),
+      }, _buktiFile);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -332,12 +317,7 @@ class _RiwayatSusulanState extends State<_RiwayatSusulan> {
   Future<void> _ambilRiwayat() async {
     setState(() => _isLoading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final response = await supabase
-          .from('absen_susulan')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      final response = await appData.requests('susulan');
       setState(() => _riwayat = List<Map<String, dynamic>>.from(response));
     } catch (e) {
       debugPrint('Gagal ambil riwayat susulan: $e');

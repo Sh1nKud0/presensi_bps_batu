@@ -1,10 +1,15 @@
 import '../pembatalan_pulang_page.dart';
 import '../../services/checkout_cancellation.dart';
+
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+
 import '../../widgets/attendance_map_card.dart';
+
 import 'package:latlong2/latlong.dart' as ll;
+
 import '../../main.dart';
 import '../../services/daily_attendance.dart';
 import '../../theme/app_theme.dart';
@@ -66,22 +71,31 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && widget.isActive) _cekAbsensiHariIni();
+    if (state == AppLifecycleState.resumed && widget.isActive) {
+      _cekAbsensiHariIni();
+    }
   }
 
   Future<void> _cekAbsensiHariIni() async {
     setState(() => _checkingAttendance = true);
     try {
-      final data = await DailyAttendanceRepository(supabase).load(supabase.auth.currentUser!.id);
+      final data = await DailyAttendanceRepository().load(appData.userId!);
       if (!mounted) return;
       setState(() {
         _daily = data;
-        _keteranganLibur = data.holiday ? (data.holidayDescription ?? 'Hari libur') : null;
+        _keteranganLibur = data.holiday
+            ? (data.holidayDescription ?? 'Hari libur')
+            : null;
         _absensiHariIni = data.attendance;
         _attendanceError = null;
       });
     } catch (_) {
-      if (mounted) setState(() => _attendanceError = 'Gagal memeriksa presensi. Ketuk Perbarui untuk mencoba lagi.');
+      if (mounted) {
+        setState(
+          () => _attendanceError =
+              'Gagal memeriksa presensi. Ketuk Perbarui untuk mencoba lagi.',
+        );
+      }
     } finally {
       if (mounted) setState(() => _checkingAttendance = false);
     }
@@ -99,11 +113,13 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
       permission = await Geolocator.requestPermission();
     }
     if (!mounted) return;
-    if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
       setState(() {
         _isLoading = false;
         _statusText = '';
-        _errorLokasi = 'Izin lokasi ditolak. Aktifkan izin lokasi di pengaturan HP.';
+        _errorLokasi =
+            'Izin lokasi ditolak. Aktifkan izin lokasi di pengaturan HP.';
       });
       return;
     }
@@ -124,7 +140,10 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
       final lastKnown = await Geolocator.getLastKnownPosition();
       if (lastKnown != null && mounted && _currentPosition == null) {
         final jarakSementara = Geolocator.distanceBetween(
-          lastKnown.latitude, lastKnown.longitude, kLatitudeKantor, kLongitudeKantor,
+          lastKnown.latitude,
+          lastKnown.longitude,
+          kLatitudeKantor,
+          kLongitudeKantor,
         );
         setState(() {
           _currentPosition = lastKnown;
@@ -137,15 +156,22 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
     }
 
     try {
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      ).timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw TimeoutException('Waktu habis mencari lokasi'),
-      );
+      final position =
+          await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+            ),
+          ).timeout(
+            const Duration(seconds: 15),
+            onTimeout: () =>
+                throw TimeoutException('Waktu habis mencari lokasi'),
+          );
       if (!mounted) return;
       final jarak = Geolocator.distanceBetween(
-        position.latitude, position.longitude, kLatitudeKantor, kLongitudeKantor,
+        position.latitude,
+        position.longitude,
+        kLatitudeKantor,
+        kLongitudeKantor,
       );
       setState(() {
         _currentPosition = position;
@@ -173,23 +199,35 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
     if (_sending || _isLoading || _checkingAttendance) return;
     setState(() => _sending = true);
     try {
-      final data = await DailyAttendanceRepository(supabase).load(supabase.auth.currentUser!.id);
+      final data = await DailyAttendanceRepository().load(appData.userId!);
       if (!mounted) return;
       setState(() {
         _daily = data;
-        _keteranganLibur = data.holiday ? (data.holidayDescription ?? 'Hari libur') : null;
+        _keteranganLibur = data.holiday
+            ? (data.holidayDescription ?? 'Hari libur')
+            : null;
         _absensiHariIni = data.attendance;
         _attendanceError = null;
       });
       if (data.blockReason != null) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data.blockReason!)));
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(data.blockReason!)));
         return;
       }
       await _simpanPresensi();
     } catch (_) {
       if (mounted) {
-        setState(() => _attendanceError = 'Status presensi belum dapat diperiksa. Coba perbarui.');
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Presensi tidak dikirim karena status hari ini belum dapat diperiksa.')));
+        setState(
+          () => _attendanceError =
+              'Status presensi belum dapat diperiksa. Coba perbarui.',
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Presensi tidak dikirim karena status hari ini belum dapat diperiksa.',
+            ),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _sending = false);
@@ -199,7 +237,11 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
   Future<void> _simpanPresensi() async {
     if (_keteranganLibur != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hari ini adalah hari libur, presensi tidak diperlukan.')),
+        const SnackBar(
+          content: Text(
+            'Hari ini adalah hari libur, presensi tidak diperlukan.',
+          ),
+        ),
       );
       return;
     }
@@ -211,7 +253,8 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
       return;
     }
 
-    final sudahMasuk = _absensiHariIni != null && _absensiHariIni!['jam_masuk'] != null;
+    final sudahMasuk =
+        _absensiHariIni != null && _absensiHariIni!['jam_masuk'] != null;
     final isMasuk = !sudahMasuk;
 
     if (_jarakKeKantor! > kRadiusMeter) {
@@ -224,7 +267,10 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
             'Presensi hanya bisa dilakukan dalam radius $kRadiusMeter meter.',
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('OK')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
           ],
         ),
       );
@@ -237,52 +283,46 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
     });
 
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final today = tanggalPresensiHariIni();
-      final now = DateTime.now().toUtc().toIso8601String();
-
-      if (isMasuk) {
-        final inserted = await supabase
-            .from('absensi')
-            .insert({
-              'user_id': userId,
-              'tanggal': today,
-              'jam_masuk': now,
-              'latitude_masuk': _currentPosition!.latitude,
-              'longitude_masuk': _currentPosition!.longitude,
-              'jarak_dari_kantor_meter': _jarakKeKantor,
-              'status': 'hadir',
-            })
-            .select()
-            .single();
-        if (mounted) setState(() { _absensiHariIni = inserted; _daily = DailyAttendance(attendance: inserted); });
-      } else {
-        final updated = await supabase
-            .from('absensi')
-            .update({
-              'jam_pulang': now,
-              'latitude_pulang': _currentPosition!.latitude,
-              'longitude_pulang': _currentPosition!.longitude,
-            })
-            .eq('user_id', userId)
-            .eq('tanggal', today)
-            .isFilter('jam_pulang', null)
-            .select()
-            .single();
-        if (mounted) setState(() { _absensiHariIni = updated; _daily = DailyAttendance(attendance: updated); });
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      ).timeout(const Duration(seconds: 15));
+      final result = await appData.api.json(
+        'POST',
+        '/api/attendance/${isMasuk ? 'check-in' : 'check-out'}',
+        body: {
+          'latitude': position.latitude,
+          'longitude': position.longitude,
+          'accuracy': position.accuracy,
+          'is_mocked': position.isMocked,
+          'captured_at': position.timestamp.toUtc().toIso8601String(),
+        },
+      );
+      final row = result['attendance'] as Map<String, dynamic>;
+      if (mounted) {
+        setState(() {
+          _absensiHariIni = row;
+          _daily = DailyAttendance(attendance: row);
+        });
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isMasuk ? 'Absen masuk berhasil!' : 'Absen pulang berhasil!'),
+          content: Text(
+            isMasuk ? 'Absen masuk berhasil!' : 'Absen pulang berhasil!',
+          ),
           backgroundColor: AppColors.tertiaryContainer,
         ),
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menyimpan: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Gagal menyimpan: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     } finally {
       if (mounted) {
@@ -296,8 +336,10 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final sudahMasuk = _absensiHariIni != null && _absensiHariIni!['jam_masuk'] != null;
-    final sudahPulang = _absensiHariIni != null && _absensiHariIni!['jam_pulang'] != null;
+    final sudahMasuk =
+        _absensiHariIni != null && _absensiHariIni!['jam_masuk'] != null;
+    final sudahPulang =
+        _absensiHariIni != null && _absensiHariIni!['jam_pulang'] != null;
     final selesai = sudahMasuk && sudahPulang;
     final blocked = _attendanceError ?? _daily?.blockReason;
 
@@ -312,13 +354,20 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
           AttendanceMapCard(
             office: const ll.LatLng(kLatitudeKantor, kLongitudeKantor),
             radius: kRadiusMeter,
-            position: _currentPosition == null ? null : ll.LatLng(
-              _currentPosition!.latitude, _currentPosition!.longitude),
+            position: _currentPosition == null
+                ? null
+                : ll.LatLng(
+                    _currentPosition!.latitude,
+                    _currentPosition!.longitude,
+                  ),
             distance: _jarakKeKantor,
             accuracy: _currentPosition?.accuracy,
             locationReady: _lokasiDiambil,
             refreshing: _isLoading,
-            onRefresh: () { _cekAbsensiHariIni(); _ambilLokasi(); },
+            onRefresh: () {
+              _cekAbsensiHariIni();
+              _ambilLokasi();
+            },
           ),
           const SizedBox(height: 24),
 
@@ -336,12 +385,19 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.location_off, color: context.appColors.error, size: 20),
+                      Icon(
+                        Icons.location_off,
+                        color: context.appColors.error,
+                        size: 20,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _errorLokasi!,
-                          style: TextStyle(color: context.appColors.error, fontSize: 12),
+                          style: TextStyle(
+                            color: context.appColors.error,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ],
@@ -353,7 +409,9 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
                       onPressed: _isLoading ? null : _ambilLokasi,
                       icon: const Icon(Icons.refresh, size: 16),
                       label: const Text('Coba Lagi'),
-                      style: OutlinedButton.styleFrom(foregroundColor: context.appColors.error),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: context.appColors.error,
+                      ),
                     ),
                   ),
                 ],
@@ -378,11 +436,18 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
                       children: [
                         Text(
                           'Hari Libur: $_keteranganLibur',
-                          style: TextStyle(color: context.appColors.liburText, fontWeight: FontWeight.w700, fontSize: 13),
+                          style: TextStyle(
+                            color: context.appColors.liburText,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
                         ),
                         Text(
                           'Presensi tidak diperlukan hari ini.',
-                          style: TextStyle(color: context.appColors.liburText, fontSize: 12),
+                          style: TextStyle(
+                            color: context.appColors.liburText,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
@@ -404,7 +469,9 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
                   Expanded(
                     child: Text(
                       'Presensi hari ini sudah lengkap (masuk & pulang).',
-                      style: AppText.bodyMd.copyWith(color: context.appColors.hadirText),
+                      style: AppText.bodyMd.copyWith(
+                        color: context.appColors.hadirText,
+                      ),
                     ),
                   ),
                 ],
@@ -413,39 +480,76 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
           else if (blocked != null)
             Container(
               padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: context.appColors.izinBg, borderRadius: BorderRadius.circular(12)),
-              child: Text(blocked, style: TextStyle(color: context.appColors.izinText)),
+              decoration: BoxDecoration(
+                color: context.appColors.izinBg,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                blocked,
+                style: TextStyle(color: context.appColors.izinText),
+              ),
             )
           else
             ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 52, minWidth: double.infinity),
+              constraints: const BoxConstraints(
+                minHeight: 52,
+                minWidth: double.infinity,
+              ),
               child: ElevatedButton(
-                onPressed: _isLoading || _sending || _checkingAttendance || _daily == null ? null : _kirimAbsensi,
+                onPressed:
+                    _isLoading ||
+                        _sending ||
+                        _checkingAttendance ||
+                        _daily == null
+                    ? null
+                    : _kirimAbsensi,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: context.appColors.primary,
                   foregroundColor: context.appColors.onPrimary,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   elevation: 2,
                 ),
                 child: _isLoading || _sending || _checkingAttendance
                     ? SizedBox(
-                        height: 20, width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary.withValues(alpha: 0.9)),
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: context.appColors.onPrimary.withValues(
+                            alpha: 0.9,
+                          ),
+                        ),
                       )
                     : Text(
                         sudahMasuk ? 'Kirim Absen Pulang' : 'Kirim Absen Masuk',
-                        style: AppText.headlineSm.copyWith(color: context.appColors.onPrimary, fontSize: 16),
+                        style: AppText.headlineSm.copyWith(
+                          color: context.appColors.onPrimary,
+                          fontSize: 16,
+                        ),
                       ),
               ),
             ),
           if (_statusText.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(_statusText, style: AppText.bodyMd, textAlign: TextAlign.center),
+            Text(
+              _statusText,
+              style: AppText.bodyMd,
+              textAlign: TextAlign.center,
+            ),
           ],
-          if (canCancelCheckout(_absensiHariIni, hasActiveRequest: _daily?.requestBlockReason != null))
+          if (canCancelCheckout(
+            _absensiHariIni,
+            hasActiveRequest: _daily?.requestBlockReason != null,
+          ))
             OutlinedButton.icon(
               onPressed: () async {
-                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PembatalanPulangPage()));
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const PembatalanPulangPage(),
+                  ),
+                );
                 if (mounted) await _cekAbsensiHariIni();
               },
               icon: const Icon(Icons.undo),

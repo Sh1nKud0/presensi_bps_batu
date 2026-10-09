@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../main.dart';
 import '../../theme/app_theme.dart';
 
@@ -12,6 +12,7 @@ class GantiPasswordPage extends StatefulWidget {
 
 class _GantiPasswordPageState extends State<GantiPasswordPage> {
   final _formKey = GlobalKey<FormState>();
+  final _passwordLamaController = TextEditingController();
   final _passwordBaruController = TextEditingController();
   final _konfirmasiController = TextEditingController();
   bool _obscure = true;
@@ -19,6 +20,7 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
 
   @override
   void dispose() {
+    _passwordLamaController.dispose();
     _passwordBaruController.dispose();
     _konfirmasiController.dispose();
     super.dispose();
@@ -29,24 +31,17 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
 
     setState(() => _saving = true);
     try {
-      await supabase.auth.updateUser(
-        UserAttributes(password: _passwordBaruController.text.trim()),
-      );
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password berhasil diubah'), backgroundColor: AppColors.tertiaryContainer),
-      );
-      Navigator.of(context).pop();
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal: ${e.message}'), backgroundColor: AppColors.error),
+      await appData.changePassword(
+        _passwordLamaController.text,
+        _passwordBaruController.text,
       );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Terjadi kesalahan: $e'), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text('Terjadi kesalahan: $e'),
+          backgroundColor: AppColors.error,
+        ),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -68,8 +63,20 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
           children: [
             Text('Ganti Password', style: AppText.headlineSm),
             const SizedBox(height: 4),
-            Text('Password baru minimal 6 karakter.', style: AppText.bodyMd),
+            Text('Password baru minimal 8 karakter.', style: AppText.bodyMd),
             const SizedBox(height: 24),
+            ...[
+              TextFormField(
+                controller: _passwordLamaController,
+                obscureText: true,
+                decoration: const InputDecoration(
+                  labelText: 'Password saat ini',
+                ),
+                validator: (v) =>
+                    v == null || v.isEmpty ? 'Isi password saat ini' : null,
+              ),
+              const SizedBox(height: 16),
+            ],
             TextFormField(
               controller: _passwordBaruController,
               obscureText: _obscure,
@@ -77,13 +84,19 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                 labelText: 'Password Baru',
                 prefixIcon: const Icon(Icons.lock_outline),
                 suffixIcon: IconButton(
-                  icon: Icon(_obscure ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                  icon: Icon(
+                    _obscure
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                  ),
                   onPressed: () => setState(() => _obscure = !_obscure),
                 ),
               ),
               validator: (v) {
-                if (v == null || v.isEmpty) return 'Password tidak boleh kosong';
-                if (v.length < 6) return 'Minimal 6 karakter';
+                if (v == null || v.isEmpty) {
+                  return 'Password tidak boleh kosong';
+                }
+                if (v.length < 8) return 'Minimal 8 karakter';
                 return null;
               },
             ),
@@ -96,7 +109,9 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                 prefixIcon: Icon(Icons.lock_outline),
               ),
               validator: (v) {
-                if (v != _passwordBaruController.text) return 'Password tidak cocok';
+                if (v != _passwordBaruController.text) {
+                  return 'Password tidak cocok';
+                }
                 return null;
               },
             ),
@@ -107,12 +122,18 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
                 backgroundColor: context.appColors.primary,
                 foregroundColor: context.appColors.onPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
               ),
               child: _saving
                   ? SizedBox(
-                      height: 20, width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary),
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: context.appColors.onPrimary,
+                      ),
                     )
                   : const Text('Ubah Password'),
             ),

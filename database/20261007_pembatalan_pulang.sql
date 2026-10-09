@@ -1,3 +1,6 @@
+-- ARSIP SUPABASE: tidak digunakan aplikasi saat ini.
+-- Skema PostgreSQL aktif dikelola melalui backend/migrations dan npm run db:migrate.
+
 -- Jalankan sekali di Supabase SQL Editor sebelum memakai versi aplikasi ini.
 -- Persetujuan dan pengosongan jam pulang dilakukan dalam satu transaksi.
 begin;

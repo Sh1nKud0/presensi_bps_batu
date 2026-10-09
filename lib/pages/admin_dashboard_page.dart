@@ -118,7 +118,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         0,
       ).toIso8601String().substring(0, 10);
 
-      // Join absensi dengan profiles untuk ambil nama peserta
+      // Gabungkan presensi dan izin/sakit disetujui pada bulan terpilih.
       final response = appData.decorate(
         await appData.api.all(
           '/api/admin/attendance',
@@ -126,9 +126,46 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           query: {'from': awal, 'to': akhir},
         ),
       );
+      final izinResponse = await appData.requests(
+        'izin',
+        admin: true,
+        status: 'disetujui',
+      );
 
       if (!mounted || bulan != _bulanRekap || tahun != _tahunRekap) return;
-      setState(() => _rekapSemua = List<Map<String, dynamic>>.from(response));
+      final rekap = List<Map<String, dynamic>>.from(response);
+      final tanggalDenganAbsensi = rekap
+          .map((item) => '${item['user_id']}/${item['tanggal']}')
+          .toSet();
+      final awalBulan = DateTime.utc(tahun, bulan, 1);
+      final akhirBulan = DateTime.utc(tahun, bulan + 1, 0);
+
+      for (final item in izinResponse) {
+        final mulai = DateTime.parse('${item['tanggal_mulai']}T00:00:00Z');
+        final selesai = DateTime.parse('${item['tanggal_selesai']}T00:00:00Z');
+        if (mulai.isAfter(akhirBulan) || selesai.isBefore(awalBulan)) continue;
+        for (
+          var tanggal = mulai.isBefore(awalBulan) ? awalBulan : mulai;
+          !tanggal.isAfter(selesai) && !tanggal.isAfter(akhirBulan);
+          tanggal = tanggal.add(const Duration(days: 1))
+        ) {
+          final tanggalString = tanggal.toIso8601String().substring(0, 10);
+          final key = '${item['user_id']}/$tanggalString';
+          // Presensi asli tetap menjadi sumber status utama.
+          if (tanggalDenganAbsensi.contains(key)) continue;
+          rekap.add({
+            'user_id': item['user_id'],
+            'tanggal': tanggalString,
+            'status': item['jenis'] == 'sakit' ? 'sakit' : 'izin',
+            'jam_masuk': null,
+            'jam_pulang': null,
+            'profiles': item['profiles'],
+          });
+          tanggalDenganAbsensi.add(key);
+        }
+      }
+      rekap.sort((a, b) => '${b['tanggal']}'.compareTo('${a['tanggal']}'));
+      setState(() => _rekapSemua = rekap);
     } catch (e) {
       if (mounted && bulan == _bulanRekap && tahun == _tahunRekap) {
         ScaffoldMessenger.of(context)
@@ -712,7 +749,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             child: ListTile(
               title: Text(namaPeserta),
               subtitle: Text(
-                '${item['tanggal']}  |  Masuk: ${_formatJam(item['jam_masuk'])}  |  Pulang: ${_formatJam(item['jam_pulang'])}',
+                item['status'] == 'izin' || item['status'] == 'sakit'
+                    ? '${item['tanggal']}  |  ${statusPresensi(item)}'
+                    : '${item['tanggal']}  |  Masuk: ${_formatJam(item['jam_masuk'])}  |  Pulang: ${_formatJam(item['jam_pulang'])}',
               ),
               trailing: _badgeStatusRekap(item),
             ),

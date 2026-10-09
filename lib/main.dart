@@ -6,6 +6,7 @@ import 'notification_service.dart';
 import 'theme/app_theme.dart';
 import 'theme/theme_controller.dart';
 import 'widgets/glass_surface.dart';
+import 'widgets/app_splash_screen.dart';
 import 'services/app_data.dart';
 export 'services/app_data.dart' show appData;
 
@@ -61,6 +62,7 @@ class AuthGate extends StatefulWidget {
 
 class _AuthGateState extends State<AuthGate> {
   late Future<void> _restore;
+  bool _introCompleted = false;
   @override
   void initState() {
     super.initState();
@@ -72,9 +74,12 @@ class _AuthGateState extends State<AuthGate> {
     return FutureBuilder<void>(
       future: _restore,
       builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+        if (!_introCompleted ||
+            snapshot.connectionState != ConnectionState.done) {
+          return AppSplashScreen(
+            onIntroCompleted: () {
+              if (mounted) setState(() => _introCompleted = true);
+            },
           );
         }
         if (snapshot.hasError) {

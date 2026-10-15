@@ -10,8 +10,9 @@ try {
   `);
   console.table(result.rows);
   console.log('Koneksi berhasil. Tidak ada tabel atau data yang diubah.');
-} catch {
+} catch (error) {
   console.error('Pemeriksaan gagal. Periksa backend/.env dan pastikan tunnel SSH aktif.');
+  if (error instanceof Error) console.error(`Detail: ${error.message}`);
   process.exitCode = 1;
 } finally {
   if (database) await database.end();

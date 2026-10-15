@@ -286,7 +286,7 @@ class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Segera lakukan presensi. Jika ada kendala (dinas luar/GPS error), ajukan Absen Susulan di menu Profil.',
+                          'Segera lakukan presensi. Jika ada kendala (kegiatan di luar BPS/GPS error), ajukan Absen Susulan di menu Profil.',
                           style: AppText.bodyMd.copyWith(color: context.appColors.onErrorContainer, fontSize: 12),
                         ),
                       ],

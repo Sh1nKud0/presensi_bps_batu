@@ -402,18 +402,6 @@ class _AbsenTabState extends State<AbsenTab> with WidgetsBindingObserver {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _isLoading ? null : _ambilLokasi,
-                      icon: const Icon(Icons.refresh, size: 16),
-                      label: const Text('Coba Lagi'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: context.appColors.error,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),

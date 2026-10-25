@@ -6,15 +6,17 @@ import 'glass_surface.dart';
 class GlassBottomNavigation extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+  final bool isAdmin;
   const GlassBottomNavigation({
     super.key,
     required this.selectedIndex,
     required this.onSelected,
+    this.isAdmin = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final items = [
+    final participantItems = [
       (_NavItem(
         icon: Icons.home_outlined,
         activeIcon: Icons.home,
@@ -36,6 +38,9 @@ class GlassBottomNavigation extends StatelessWidget {
         label: 'Profil',
       )),
     ];
+    final items = isAdmin
+        ? [participantItems[0], participantItems[3]]
+        : participantItems;
 
     return SafeArea(
       top: false,

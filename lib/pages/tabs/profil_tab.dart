@@ -1,6 +1,5 @@
 import '../../widgets/adaptive_tiles.dart';
 import '../../widgets/glass_surface.dart';
-import '../pembatalan_pulang_page.dart';
 
 import 'package:flutter/material.dart';
 
@@ -9,7 +8,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/theme_switch_tile.dart';
 import '../izin_page.dart';
 import 'absen_susulan_page.dart';
-import '../admin_dashboard_page.dart';
 import 'edit_profil_page.dart';
 import 'ganti_password_page.dart';
 
@@ -39,13 +37,16 @@ class _ProfilTabState extends State<ProfilTab> {
     try {
       final profile = await appData.profile();
 
-      final counts = await appData.api.json('GET', '/api/me/statistics');
+      final isAdmin = profile['role'] == 'admin';
+      final counts = isAdmin
+          ? <String, dynamic>{'hadir': 0, 'izin': 0}
+          : await appData.api.json('GET', '/api/me/statistics');
       if (!mounted) return;
 
       setState(() {
         _nama = profile['nama_lengkap'] ?? '-';
         _asalInstansi = profile['asal_instansi'] ?? '-';
-        _isAdmin = profile['role'] == 'admin';
+        _isAdmin = isAdmin;
         _totalHadir = counts['hadir'] as int;
         _totalIzin = counts['izin'] as int;
       });
@@ -146,8 +147,7 @@ class _ProfilTabState extends State<ProfilTab> {
           ),
           const SizedBox(height: 16),
 
-          // Statistik bento
-          AdaptiveTiles(
+          if (!_isAdmin) AdaptiveTiles(
             minTileWidth: 140,
             children: [
               _statKartu(
@@ -164,22 +164,22 @@ class _ProfilTabState extends State<ProfilTab> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          if (!_isAdmin) const SizedBox(height: 16),
 
           // Menu pengaturan
           GlassSurface(
             radius: 24,
             child: Column(
               children: [
-                _menuHeader('AKTIVITAS'),
-                _menuItem(
+                if (!_isAdmin) _menuHeader('AKTIVITAS'),
+                if (!_isAdmin) _menuItem(
                   icon: Icons.event_busy,
                   label: 'Izin / Sakit',
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (context) => const IzinPage()),
                   ),
                 ),
-                _menuItem(
+                if (!_isAdmin) _menuItem(
                   icon: Icons.history_toggle_off,
                   label: 'Absen Susulan',
                   onTap: () => Navigator.of(context).push(
@@ -188,25 +188,6 @@ class _ProfilTabState extends State<ProfilTab> {
                     ),
                   ),
                 ),
-                _menuItem(
-                  icon: Icons.undo,
-                  label: 'Pembatalan Absen Pulang',
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => PembatalanPulangPage(isAdmin: _isAdmin),
-                    ),
-                  ),
-                ),
-                if (_isAdmin)
-                  _menuItem(
-                    icon: Icons.admin_panel_settings,
-                    label: 'Dashboard Admin',
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const AdminDashboardPage(),
-                      ),
-                    ),
-                  ),
                 _menuHeader('TAMPILAN'),
                 const ThemeSwitchTile(),
                 _menuHeader('PENGATURAN AKUN'),

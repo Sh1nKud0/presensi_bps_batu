@@ -77,13 +77,26 @@ class AppData {
     String kind, {
     bool admin = false,
     String? status,
-  }) async => decorate(
-    await api.all(
-      '/api/${admin ? 'admin/' : ''}requests/$kind',
-      'requests',
-      query: {'status': ?status},
-    ),
-  );
+  }) async {
+    final path = '/api/${admin ? 'admin/' : ''}requests/$kind';
+    if (!admin || status != null) {
+      return decorate(
+        await api.all(path, 'requests', query: {'status': ?status}),
+      );
+    }
+    // Endpoint admin tanpa filter hanya mengembalikan pengajuan menunggu.
+    final pages = await Future.wait([
+      for (final value in ['menunggu', 'disetujui', 'ditolak'])
+        api.all(path, 'requests', query: {'status': value}),
+    ]);
+    final records = <String, Map<String, dynamic>>{};
+    for (final page in pages) {
+      for (final row in page) {
+        records[row['id'] as String] = row;
+      }
+    }
+    return decorate(records.values.toList());
+  }
 
   Future<void> submitRequest(
     String kind,

@@ -12,16 +12,21 @@ import '../pages/izin_page.dart';
 import '../pages/tabs/absen_susulan_page.dart';
 import '../pages/pembatalan_pulang_page.dart';
 import '../services/rekap_presensi.dart';
+import '../notification_service.dart';
 
 class RequestNotificationsButton extends StatefulWidget {
   final String userId;
   final bool isAdmin;
   final RequestNotificationsSource? repository;
+  final bool notifySystem;
+  final ValueChanged<int>? onUnreadChanged;
   const RequestNotificationsButton({
     super.key,
     required this.userId,
     required this.isAdmin,
     this.repository,
+    this.notifySystem = false,
+    this.onUnreadChanged,
   });
 
   @override
@@ -37,6 +42,7 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
   final _revision = ValueNotifier<int>(0);
   bool _opening = false;
   bool _loading = false;
+  static bool _announcing = false;
   String? _error;
   String get _storageKey => 'request_notifications_read_${widget.userId}';
 
@@ -75,19 +81,23 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
     if (_loading) return;
     _loading = true;
     try {
-      final data =
-          await (widget.repository ?? RequestNotificationsRepository())
-              .load(widget.userId, widget.isAdmin);
+      final data = await (widget.repository ?? RequestNotificationsRepository())
+          .load(widget.userId, widget.isAdmin);
       final preferences = await SharedPreferences.getInstance();
       if (!mounted) return;
       setState(() {
         _items = data;
         _read = widget.repository == null
-          ? data.where((item) => item.read).map((item) => item.readKey).toSet()
-          : (preferences.getStringList(_storageKey) ?? []).toSet();
+            ? data
+                  .where((item) => item.read)
+                  .map((item) => item.readKey)
+                  .toSet()
+            : (preferences.getStringList(_storageKey) ?? []).toSet();
         _error = null;
       });
       _revision.value++;
+      _reportUnread();
+      if (widget.isAdmin && widget.notifySystem) unawaited(_announceNew());
     } catch (_) {
       if (mounted) {
         setState(
@@ -100,17 +110,70 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
     }
   }
 
+  void _reportUnread() {
+    widget.onUnreadChanged?.call(
+      _items.where((item) => !_read.contains(item.readKey)).length,
+    );
+  }
+
+  Future<void> _announceNew() async {
+    if (_announcing) return;
+    _announcing = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (!mounted) return;
+      final key = 'admin_requests_announced_${widget.userId}';
+      final announced = (prefs.getStringList(key) ?? []).toSet();
+      final fresh = newAdminRequests(_items, _read, announced);
+      if (fresh.isEmpty) return;
+      final shown = await NotificationService.instance.tampilkanPengajuanAdmin(
+        fresh.length == 1
+            ? fresh.first.title
+            : '${fresh.length} pengajuan baru',
+        fresh.length == 1
+            ? fresh.first.message
+            : '${fresh.first.title}. Buka lonceng di dashboard untuk meninjau semua pengajuan.',
+      );
+      if (shown) {
+        await prefs.setStringList(
+          key,
+          {
+            ..._items
+                .where((item) => announced.contains(item.readKey))
+                .map((item) => item.readKey),
+            ...fresh.map((item) => item.readKey),
+          }.toList(),
+        );
+      }
+    } catch (_) {
+      // Daftar dan badge tetap tersedia jika izin notifikasi perangkat ditolak.
+    } finally {
+      _announcing = false;
+    }
+  }
+
   Future<bool> _markRead(Iterable<RequestNotification> items) async {
     final updated = {..._read, ...items.map((item) => item.readKey)};
     try {
       if (widget.repository == null) {
-        final ids = items.map((item) => item.notificationId).whereType<String>().toList();
+        final ids = items
+            .map((item) => item.notificationId)
+            .whereType<String>()
+            .toList();
         for (var offset = 0; offset < ids.length; offset += 100) {
-          await appData.api.json('PATCH', '/api/notifications/read', body: {
-            'ids': ids.sublist(offset, (offset + 100).clamp(0, ids.length)),
-          });
+          await appData.api.json(
+            'PATCH',
+            '/api/notifications/read',
+            body: {
+              'ids': ids.sublist(offset, (offset + 100).clamp(0, ids.length)),
+            },
+          );
         }
-        if (mounted) { setState(() => _read = updated); _revision.value++; }
+        if (mounted) {
+          setState(() => _read = updated);
+          _revision.value++;
+          _reportUnread();
+        }
         return true;
       }
       final preferences = await SharedPreferences.getInstance();
@@ -122,6 +185,7 @@ class _RequestNotificationsButtonState extends State<RequestNotificationsButton>
       if (mounted) {
         setState(() => _read = updated);
         _revision.value++;
+        _reportUnread();
       }
       return true;
     } catch (_) {

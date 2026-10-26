@@ -24,6 +24,28 @@ class _FakeRepository implements RequestNotificationsSource {
 }
 
 void main() {
+  test('Admin system alerts exclude read, announced and decided requests', () {
+    RequestNotification item(String id, {String status = 'menunggu'}) =>
+        RequestNotification(
+          id: id,
+          table: 'izin',
+          status: status,
+          title: id,
+          message: id,
+          createdAt: DateTime.utc(2026),
+        );
+    final fresh = item('fresh');
+    final read = item('read');
+    final announced = item('announced');
+    expect(
+      newAdminRequests(
+        [fresh, read, announced, item('approved', status: 'disetujui')],
+        {read.readKey},
+        {announced.readKey},
+      ).map((i) => i.id),
+      ['fresh'],
+    );
+  });
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   test(
@@ -195,6 +217,47 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byTooltip('Notifikasi: 1 belum dibaca'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
+    },
+  );
+
+  testWidgets(
+    'Admin unread banner count updates when notifications are marked read',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final repo = _FakeRepository();
+      repo.items = [
+        RequestNotification(
+          id: 'request',
+          table: 'izin',
+          status: 'menunggu',
+          title: 'Permintaan sakit',
+          message: 'Menunggu persetujuan',
+          createdAt: DateTime.now().toUtc(),
+        ),
+      ];
+      final counts = <int>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: RequestNotificationsButton(
+              userId: 'admin',
+              isAdmin: true,
+              repository: repo,
+              onUnreadChanged: counts.add,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(counts.last, 1);
+      expect(find.byTooltip('Notifikasi: 1 belum dibaca'), findsOneWidget);
+      await tester.tap(find.byType(IconButton));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tandai semua dibaca'));
+      await tester.pumpAndSettle();
+      expect(counts.last, 0);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpAndSettle();
     },
   );
 

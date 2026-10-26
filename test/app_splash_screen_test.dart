@@ -32,7 +32,7 @@ void main() {
       expect(completed, 0);
       await tester.pump(const Duration(milliseconds: 1600));
       expect(completed, 1);
-      expect(find.text('Presensi Magang'), findsOneWidget);
+      expect(find.text('magang presensi bps Batu'), findsOneWidget);
       expect(find.text('BPS Kota Batu'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());

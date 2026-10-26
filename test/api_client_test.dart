@@ -179,6 +179,47 @@ void main() {
     );
   });
 
+  test('Admin unfiltered requests explicitly load all statuses and paginate approved history', () async {
+    final statuses = <String>[];
+    final api = ApiClient(
+      origin,
+      transport: MockClient((request) async {
+        if (request.url.path.endsWith('/login')) {
+          return json({'access_token': token, 'user': user});
+        }
+        expect(request.url.path, '/api/admin/requests/izin');
+        final status = request.url.queryParameters['status'] ?? 'menunggu';
+        statuses.add(status);
+        final offset = int.parse(request.url.queryParameters['offset']!);
+        return json({
+          'requests': status == 'menunggu'
+              ? []
+              : List.generate(
+                  status == 'disetujui' ? (offset == 0 ? 100 : 1) : 1,
+                  (i) => {
+                    'id': '$status-${offset + i}',
+                    'nama_lengkap': 'Peserta',
+                    'status_persetujuan': status,
+                    'bukti_id': 'proof',
+                  },
+                ),
+        });
+      }),
+    );
+    await api.login('admin@example.com', 'password');
+    final rows = await AppData(client: api).requests('izin', admin: true);
+    expect(statuses, containsAll(['menunggu', 'disetujui', 'ditolak']));
+    expect(statuses.where((value) => value == 'disetujui').length, 2);
+    expect(rows.length, 102);
+    expect(
+      rows.where((row) => row['status_persetujuan'] == 'disetujui').length,
+      101,
+    );
+    expect(rows.first['profiles']['nama_lengkap'], 'Peserta');
+    expect(rows.first['bukti_url'], 'private:proof');
+    api.dispose();
+  });
+
   test('evidence upload uses raw MIME bytes and private ID; decision never writes attendance from mobile', () async {
     final calls = <http.Request>[];
     final api = ApiClient(

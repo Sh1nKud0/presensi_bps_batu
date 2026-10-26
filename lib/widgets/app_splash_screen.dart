@@ -106,7 +106,7 @@ class _AppSplashScreenState extends State<AppSplashScreen>
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  'Presensi Magang',
+                                  'magang presensi bps Batu',
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context)
                                       .textTheme

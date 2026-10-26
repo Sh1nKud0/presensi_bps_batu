@@ -1,6 +1,19 @@
 import 'rekap_presensi.dart';
 import 'app_data.dart';
 
+List<RequestNotification> newAdminRequests(
+  List<RequestNotification> items,
+  Set<String> read,
+  Set<String> announced,
+) => items
+    .where(
+      (item) =>
+          item.status == 'menunggu' &&
+          !read.contains(item.readKey) &&
+          !announced.contains(item.readKey),
+    )
+    .toList();
+
 List<RequestNotification> filterNotificationsByDay(
   List<RequestNotification> items,
   DateTime? day,

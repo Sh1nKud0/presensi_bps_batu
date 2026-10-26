@@ -7,7 +7,7 @@ class AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Logo Presensi Magang',
+    label: 'Logo magang presensi bps Batu',
     image: true,
     child: SizedBox.square(
       dimension: size,

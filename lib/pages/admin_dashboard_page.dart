@@ -2,6 +2,7 @@ import '../widgets/evidence_image.dart';
 import 'pembatalan_pulang_page.dart';
 
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
@@ -13,18 +14,22 @@ import 'package:file_saver/file_saver.dart';
 
 import '../services/rekap_presensi.dart';
 import '../main.dart';
+import '../services/admin_daily_attendance.dart';
+import '../widgets/request_notifications_button.dart';
+import '../widgets/admin_daily_attendance_list.dart';
+import '../widgets/admin_request_history_tab.dart';
 
 class AdminDashboardPage extends StatefulWidget {
   final int initialTab;
   const AdminDashboardPage({super.key, this.initialTab = 0})
-    : assert(initialTab >= 0 && initialTab < 6);
+    : assert(initialTab >= 0 && initialTab < 7);
 
   @override
   State<AdminDashboardPage> createState() => _AdminDashboardPageState();
 }
 
 class _AdminDashboardPageState extends State<AdminDashboardPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
 
   bool _loadingHariIni = true;
@@ -32,7 +37,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   bool _loadingIzin = true;
   bool _loadingLibur = true;
   List<Map<String, dynamic>> _semuaPeserta = [];
-  Map<String, Map<String, dynamic>> _absensiHariIniMap = {};
+  Map<String, AdminDailyStatus> _statusHariIni = {};
+  Timer? _refreshTimer;
+  bool _refreshingToday = false;
+  String _dayHariIni = '';
+  Future<AdminDailyOverview>? _todayLoad;
+  int _unreadNotifications = 0;
+  int _historyRevision = 0;
   List<Map<String, dynamic>> _rekapSemua = [];
   int _bulanRekap = DateTime.now().month;
   int _tahunRekap = DateTime.now().year;
@@ -47,8 +58,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startRefreshTimer();
     _tabController = TabController(
-      length: 6,
+      length: 7,
       vsync: this,
       initialIndex: widget.initialTab,
     );
@@ -62,9 +75,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_saatTabBerubah);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _ambilDataHariIni(silent: true);
+      _ambilIzinMenunggu(silent: true);
+      _ambilSusulanMenunggu(silent: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _ambilDataHariIni(silent: true);
+      _ambilIzinMenunggu(silent: true);
+      _ambilSusulanMenunggu(silent: true);
+      _startRefreshTimer();
+    } else {
+      _refreshTimer?.cancel();
+    }
   }
 
   void _saatTabBerubah() {
@@ -72,36 +108,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     if (index == _tabIndexTerakhir) return;
     _tabIndexTerakhir = index;
     if (index == 4) _ambilHariLibur();
+    if (index == 0) _ambilDataHariIni(silent: true);
+    if (index == 6) setState(() => _historyRevision++);
   }
 
-  Future<void> _ambilDataHariIni() async {
-    setState(() => _loadingHariIni = true);
+  Future<void> _ambilDataHariIni({bool silent = false}) async {
+    if (_refreshingToday) return;
+    _refreshingToday = true;
+    if (!silent) setState(() => _loadingHariIni = true);
     try {
-      final peserta = await appData.api.all(
-        '/api/admin/participants',
-        'participants',
-      );
-      final absensiHariIni = await appData.api.all(
-        '/api/admin/attendance',
-        'attendance',
-      );
-
-      final map = <String, Map<String, dynamic>>{};
-      for (final a in absensiHariIni) {
-        map[a['user_id'] as String] = a;
-      }
-
+      _todayLoad = AdminDailyAttendanceRepository().load();
+      final overview = await _todayLoad!;
+      if (!mounted) return;
       setState(() {
-        _semuaPeserta = List<Map<String, dynamic>>.from(peserta);
-        _absensiHariIniMap = map;
+        _semuaPeserta = overview.participants;
+        _statusHariIni = overview.statuses;
+        _dayHariIni = overview.day;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memuat data hari ini: $e')),
         );
       }
     } finally {
+      _refreshingToday = false;
+      _todayLoad = null;
       if (mounted) setState(() => _loadingHariIni = false);
     }
   }
@@ -178,8 +210,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     }
   }
 
-  Future<void> _ambilIzinMenunggu() async {
-    setState(() => _loadingIzin = true);
+  Future<void> _ambilIzinMenunggu({bool silent = false}) async {
+    if (!silent) setState(() => _loadingIzin = true);
     try {
       final response = await appData.requests(
         'izin',
@@ -187,9 +219,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         status: 'menunggu',
       );
 
-      setState(() => _izinMenunggu = List<Map<String, dynamic>>.from(response));
-    } catch (e) {
       if (mounted) {
+        setState(
+          () => _izinMenunggu = List<Map<String, dynamic>>.from(response),
+        );
+      }
+    } catch (e) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memuat pengajuan izin: $e')),
         );
@@ -202,7 +238,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   Future<void> _prosesIzin(String izinId, bool disetujui) async {
     try {
       if (!await _apiDecision('izin', izinId, disetujui)) return;
-      await _ambilIzinMenunggu();
+      if (mounted) await _ambilIzinMenunggu();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -330,8 +366,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
-  Future<void> _ambilSusulanMenunggu() async {
-    setState(() => _loadingSusulan = true);
+  Future<void> _ambilSusulanMenunggu({bool silent = false}) async {
+    if (!silent) setState(() => _loadingSusulan = true);
     try {
       final response = await appData.requests(
         'susulan',
@@ -339,11 +375,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         status: 'menunggu',
       );
 
-      setState(
-        () => _susulanMenunggu = List<Map<String, dynamic>>.from(response),
-      );
-    } catch (e) {
       if (mounted) {
+        setState(
+          () => _susulanMenunggu = List<Map<String, dynamic>>.from(response),
+        );
+      }
+    } catch (e) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memuat absen susulan: $e')),
         );
@@ -358,7 +396,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       if (!await _apiDecision('susulan', item['id'] as String, disetujui)) {
         return;
       }
-      await _ambilSusulanMenunggu();
+      if (mounted) await _ambilSusulanMenunggu();
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
@@ -399,6 +437,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       if (reason == null) return false;
     }
     await appData.decide(kind, id, approve, reason: reason);
+    if (!mounted) return true;
+    if (_todayLoad != null) {
+      try {
+        await _todayLoad;
+      } catch (_) {
+        /* Pembacaan berikutnya akan mencoba kembali. */
+      }
+    }
+    if (!mounted) return true;
+    await _ambilDataHariIni(silent: true);
+    if (!mounted) return true;
+    await _ambilRekapSemua();
+    if (mounted) setState(() => _historyRevision++);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -453,6 +504,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard Admin'),
+        actions: [
+          if (appData.userId != null)
+            RequestNotificationsButton(
+              userId: appData.userId!,
+              isAdmin: true,
+              notifySystem: true,
+              onUnreadChanged: (count) {
+                if (mounted && count != _unreadNotifications) {
+                  setState(() => _unreadNotifications = count);
+                }
+              },
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -464,18 +528,36 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             Tab(text: 'Approval Susulan'),
             Tab(text: 'Hari Libur'),
             Tab(text: 'Pembatalan Pulang'),
+            Tab(text: 'Riwayat Pengajuan'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildTabHariIni(),
-          _buildTabRekap(),
-          _buildTabIzin(),
-          _buildTabSusulan(),
-          _buildTabHariLibur(),
-          const PembatalanPulangContent(isAdmin: true),
+          if (_unreadNotifications > 0)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: context.appColors.izinBg,
+              child: Text(
+                '$_unreadNotifications notifikasi pengajuan belum dibaca. Ketuk lonceng untuk melihat permintaan.',
+                style: TextStyle(color: context.appColors.izinText),
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTabHariIni(),
+                _buildTabRekap(),
+                _buildTabIzin(),
+                _buildTabSusulan(),
+                _buildTabHariLibur(),
+                const PembatalanPulangContent(isAdmin: true),
+                AdminRequestHistoryTab(revision: _historyRevision),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -486,40 +568,11 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       return const Center(child: CircularProgressIndicator());
     }
 
-    return RefreshIndicator(
+    return AdminDailyAttendanceList(
+      participants: _semuaPeserta,
+      statuses: _statusHariIni,
+      day: _dayHariIni,
       onRefresh: _ambilDataHariIni,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _semuaPeserta.length,
-        itemBuilder: (context, index) {
-          final peserta = _semuaPeserta[index];
-          final absensi = _absensiHariIniMap[peserta['id']];
-          final sudahAbsen = absensi != null;
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: sudahAbsen
-                    ? context.appColors.hadirBg
-                    : context.appColors.errorContainer,
-                child: Icon(
-                  sudahAbsen ? Icons.check : Icons.close,
-                  color: sudahAbsen
-                      ? context.appColors.hadirText
-                      : context.appColors.error,
-                ),
-              ),
-              title: Text(peserta['nama_lengkap'] ?? '-'),
-              subtitle: Text(
-                sudahAbsen
-                    ? 'Masuk: ${_formatJam(absensi['jam_masuk'])}  |  Pulang: ${_formatJam(absensi['jam_pulang'])}'
-                    : 'Belum absen hari ini',
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 

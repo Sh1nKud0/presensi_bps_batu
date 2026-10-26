@@ -6,7 +6,8 @@ class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();
 
-  final FlutterLocalNotificationsPlugin _plugin = FlutterLocalNotificationsPlugin();
+  final FlutterLocalNotificationsPlugin _plugin =
+      FlutterLocalNotificationsPlugin();
 
   // Jam kerja BPS Kota Batu
   static const int jamMasukHour = 7;
@@ -19,20 +20,49 @@ class NotificationService {
     // Set default lokal ke WIB (Asia/Jakarta) - sesuaikan kalau lokasi BPS beda zona waktu
     tz.setLocalLocation(tz.getLocation('Asia/Jakarta'));
 
-    const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidSettings = AndroidInitializationSettings(
+      '@mipmap/ic_launcher',
+    );
     const initSettings = InitializationSettings(android: androidSettings);
 
     await _plugin.initialize(settings: initSettings);
   }
 
   Future<bool> mintaIzinNotifikasi() async {
-    final androidPlugin = _plugin.resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin>();
+    final androidPlugin = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
 
     final granted = await androidPlugin?.requestNotificationsPermission();
     await androidPlugin?.requestExactAlarmsPermission();
 
     return granted ?? false;
+  }
+
+  Future<bool> tampilkanPengajuanAdmin(String title, String body) async {
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (android == null) return false;
+    if (await android.requestNotificationsPermission() != true) return false;
+    await _plugin.show(
+      id: 100,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'pengajuan_presensi',
+          'Permintaan Persetujuan',
+          channelDescription:
+              'Pengajuan izin, sakit, susulan, dan pembatalan pulang',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+      ),
+    );
+    return true;
   }
 
   // Jadwalkan notifikasi berulang tiap hari kerja (Senin-Jumat)

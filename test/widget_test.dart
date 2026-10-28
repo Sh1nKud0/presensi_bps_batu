@@ -127,6 +127,10 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Email tidak boleh kosong'), findsOneWidget);
         expect(find.text('Password tidak boleh kosong'), findsOneWidget);
+        await tester.ensureVisible(
+          find.text('Belum punya akun? Daftar di sini'),
+        );
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Belum punya akun? Daftar di sini'));
         await tester.pumpAndSettle();
         expect(find.byType(RegisterPage), findsOneWidget);

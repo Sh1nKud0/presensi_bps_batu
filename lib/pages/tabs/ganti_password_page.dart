@@ -17,6 +17,7 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
   final _konfirmasiController = TextEditingController();
   bool _obscure = true;
   bool _saving = false;
+  bool get _hasPassword => appData.api.user?['has_password'] != false;
 
   @override
   void dispose() {
@@ -32,7 +33,7 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
     setState(() => _saving = true);
     try {
       await appData.changePassword(
-        _passwordLamaController.text,
+        _hasPassword ? _passwordLamaController.text : null,
         _passwordBaruController.text,
       );
     } catch (e) {
@@ -61,11 +62,18 @@ class _GantiPasswordPageState extends State<GantiPasswordPage> {
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Ganti Password', style: AppText.headlineSm),
+            Text(
+              _hasPassword ? 'Ganti Password' : 'Buat Password',
+              style: AppText.headlineSm,
+            ),
             const SizedBox(height: 4),
             Text('Password baru minimal 8 karakter.', style: AppText.bodyMd),
             const SizedBox(height: 24),
-            ...[
+            if (!_hasPassword)
+              const Text(
+                'Jika sesi sudah lama, masuk kembali dengan Google sebelum membuat password.',
+              ),
+            if (_hasPassword) ...[
               TextFormField(
                 controller: _passwordLamaController,
                 obscureText: true,

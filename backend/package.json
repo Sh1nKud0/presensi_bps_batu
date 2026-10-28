@@ -10,6 +10,7 @@
     "start": "node --env-file=.env src/index.js",
     "dev": "node --env-file=.env --watch src/index.js",
     "db:check": "node --env-file=.env scripts/check-db.js",
+    "google:check": "node --env-file=.env scripts/check-google.js",
     "db:migrate": "node --env-file=.env scripts/migrate.js",
     "admin:create": "node --env-file=.env scripts/create-admin.js",
     "auth:check": "node --env-file=.env scripts/check-auth.js",
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "exceljs": "4.4.0",
+    "google-auth-library": "11.3.1",
     "pg": "8.23.1"
   },
   "devDependencies": {

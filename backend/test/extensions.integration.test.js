@@ -323,7 +323,7 @@ test('upgrade migrasi mempertahankan akun dan mengisi notifikasi pengajuan lama'
   await database.query(`INSERT INTO presensi.izin(user_id, tanggal_mulai, tanggal_selesai, jenis,
     status_persetujuan, disetujui_oleh, diproses_at) VALUES ($1, '2026-10-09', '2026-10-09', 'sakit',
     'disetujui', $2, '2026-10-08T05:00:00Z')`, [user, admin]);
-  assert.deepEqual(await migrate(database), ['002_notifications_files.sql']);
+  assert.deepEqual(await migrate(database), ['002_notifications_files.sql', '003_google_identity.sql', '004_google_password_compatibility.sql']);
   assert.deepEqual(await migrate(database), []);
   assert.equal((await database.query('SELECT count(*)::int AS n FROM presensi.users')).rows[0].n, 2);
   assert.equal((await database.query('SELECT count(*)::int AS n FROM presensi.notifications WHERE recipient_id = $1', [admin])).rows[0].n, 1);

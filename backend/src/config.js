@@ -1,3 +1,5 @@
+import { googleClientIds } from './google.js';
+
 function port(value, fallback, name) {
   const text = value ?? String(fallback);
   const number = Number(text);
@@ -17,6 +19,7 @@ export function readConfig(env = process.env) {
     host: env.HOST || '127.0.0.1',
     port: port(env.PORT, 5010, 'PORT'),
     uploadDirectory: env.UPLOAD_DIR || undefined,
+    googleClientIds: googleClientIds(env.GOOGLE_CLIENT_IDS),
     database: {
       host: env.PGHOST || '127.0.0.1',
       port: port(env.PGPORT, 15432, 'PGPORT'),

@@ -9,6 +9,7 @@ import { createFiles, MAX_UPLOAD_BYTES } from './files.js';
 import { createReports } from './reports.js';
 import { createHolidays } from './holidays.js';
 import { createMobileQueries } from './mobile.js';
+import { createGoogleAuth } from './google.js';
 
 function json(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -55,7 +56,8 @@ function readBody(request, maxBytes) {
   });
 }
 
-export function createApp({ database, auth = createAuth(database), attendance = createAttendance(database), uploadDirectory, rateLimit = createRateLimiter() }) {
+export function createApp({ database, auth = createAuth(database), attendance = createAttendance(database), uploadDirectory, rateLimit = createRateLimiter(), googleClientIds = [], googleAuth }) {
+  const google = googleAuth ?? createGoogleAuth(database, { clientIds: googleClientIds });
   const cancellation = createCancellation(database);
   const notifications = createNotifications(database);
   const files = createFiles(database, uploadDirectory);
@@ -65,6 +67,7 @@ export function createApp({ database, auth = createAuth(database), attendance = 
   const routes = {
     '/health': 'GET', '/ready': 'GET',
     '/api/auth/register': 'POST', '/api/auth/login': 'POST',
+    '/api/auth/google/config': 'GET', '/api/auth/google/challenge': 'POST', '/api/auth/google': 'POST',
     '/api/auth/logout': 'POST', '/api/auth/password': 'POST',
     '/api/me': ['GET', 'PATCH'], '/api/admin/users': 'GET',
     '/api/me/statistics': 'GET', '/api/admin/participants': 'GET', '/api/admin/attendance': 'GET',
@@ -114,6 +117,14 @@ export function createApp({ database, auth = createAuth(database), attendance = 
     try {
       if (request.method !== 'GET') {
         rateLimit(request.socket.remoteAddress ?? 'unknown');
+      }
+      if (path === '/api/auth/google/config') {
+        json(response, 200, google.configuration());
+        return;
+      }
+      if (path === '/api/auth/google/challenge' || path === '/api/auth/google') {
+        json(response, 200, await google[path.endsWith('/challenge') ? 'challenge' : 'login'](await readJson(request)));
+        return;
       }
       if (path === '/api/auth/register' || path === '/api/auth/login') {
         const input = await readJson(request);
@@ -197,7 +208,7 @@ export function createApp({ database, auth = createAuth(database), attendance = 
       if (response.destroyed) return;
       if (error instanceof HttpError) {
         if (error.status === 429) response.setHeader('Retry-After', '60');
-        json(response, error.status, { error: error.message });
+        json(response, error.status, { error: error.message, ...(error.code ? { code: error.code } : {}) });
       } else {
         json(response, 503, { error: 'Layanan belum siap. Periksa koneksi dan jalankan migrasi database.' });
       }

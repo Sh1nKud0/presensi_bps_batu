@@ -2,6 +2,9 @@ import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { HttpError } from './errors.js';
 
+// A non-null, deliberately invalid hash also rejects password login on older API versions.
+export const GOOGLE_PASSWORD_UNSET = '!google-only';
+
 const derive = promisify(scrypt);
 const options = { N: 32768, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 

@@ -46,11 +46,11 @@ class AppData {
   }
 
   Future<void> logout() => api.logout();
-  Future<void> changePassword(String oldPassword, String newPassword) async {
+  Future<void> changePassword(String? oldPassword, String newPassword) async {
     await api.json(
       'POST',
       '/api/auth/password',
-      body: {'current_password': oldPassword, 'new_password': newPassword},
+      body: {'current_password': ?oldPassword, 'new_password': newPassword},
     );
     await api.clearSession();
   }

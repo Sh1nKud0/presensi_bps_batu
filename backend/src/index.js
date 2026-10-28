@@ -5,7 +5,7 @@ import { createApp } from './app.js';
 try {
   const config = readConfig();
   const database = createDatabase(config.database);
-  const server = createApp({ database, uploadDirectory: config.uploadDirectory });
+  const server = createApp({ database, uploadDirectory: config.uploadDirectory, googleClientIds: config.googleClientIds });
 
   server.on('error', async () => {
     console.error('Backend gagal berjalan. Periksa apakah alamat dan port tersedia.');

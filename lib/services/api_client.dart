@@ -8,7 +8,8 @@ import 'package:http/http.dart' as http;
 class ApiException implements Exception {
   final String message;
   final int? status;
-  const ApiException(this.message, [this.status]);
+  final String? code;
+  const ApiException(this.message, [this.status, this.code]);
   @override
   String toString() => message;
 }
@@ -25,9 +26,11 @@ class ApiClient extends ChangeNotifier {
   ApiClient(String url, {http.Client? transport, FlutterSecureStorage? storage})
     : base = Uri.parse(url),
       transport = transport ?? http.Client(),
-      storage = storage ?? const FlutterSecureStorage(
-        mOptions: MacOsOptions(usesDataProtectionKeychain: false),
-      ) {
+      storage =
+          storage ??
+          const FlutterSecureStorage(
+            mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+          ) {
     if (!base.hasAuthority ||
         !['http', 'https'].contains(base.scheme) ||
         base.userInfo.isNotEmpty ||
@@ -60,6 +63,28 @@ class ApiClient extends ChangeNotifier {
       body: {'email': email.trim(), 'password': password},
       authenticated: false,
     );
+    await _acceptSession(result);
+  }
+
+  Future<void> loginGoogle(
+    String credential,
+    String nonce, {
+    String? existingPassword,
+  }) async {
+    final result = await json(
+      'POST',
+      '/api/auth/google',
+      authenticated: false,
+      body: {
+        'credential': credential,
+        'nonce': nonce,
+        'existing_password': ?existingPassword,
+      },
+    );
+    await _acceptSession(result);
+  }
+
+  Future<void> _acceptSession(Map<String, dynamic> result) async {
     final token = result['access_token'] as String;
     try {
       await storage.write(key: _key, value: token);
@@ -112,7 +137,9 @@ class ApiClient extends ChangeNotifier {
     final request = http.Request(method, uri);
     request.followRedirects = false;
     final requestToken = _token;
-    if (authenticated) request.headers['Authorization'] = 'Bearer $requestToken';
+    if (authenticated) {
+      request.headers['Authorization'] = 'Bearer $requestToken';
+    }
     if (bytes != null) {
       request.headers['Content-Type'] = contentType!;
       request.bodyBytes = bytes;
@@ -135,17 +162,21 @@ class ApiClient extends ChangeNotifier {
       );
     }
     if (response.statusCode >= 300) {
-      if (response.statusCode == 401 && authenticated && _token == requestToken) {
+      if (response.statusCode == 401 &&
+          authenticated &&
+          _token == requestToken) {
         await clearSession();
       }
       String message = 'Permintaan gagal (${response.statusCode}).';
+      String? code;
       try {
-        message =
-            (jsonDecode(response.body) as Map)['error'] as String? ?? message;
+        final error = jsonDecode(response.body) as Map;
+        message = error['error'] as String? ?? message;
+        code = error['code'] is String ? error['code'] as String : null;
       } catch (_) {
         /* Proxy errors may not be JSON. */
       }
-      throw ApiException(message, response.statusCode);
+      throw ApiException(message, response.statusCode, code);
     }
     return response;
   }

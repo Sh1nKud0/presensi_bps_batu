@@ -340,3 +340,60 @@ admin. HTTP lokal pada langkah di atas hanya untuk pengembangan melalui tunnel.
 Referensi: [node-postgres](https://node-postgres.com/features/connecting),
 [transaksi](https://node-postgres.com/features/transactions), dan
 [Node.js crypto](https://nodejs.org/api/crypto.html).
+
+
+## Login Google untuk web dan akun Android yang sama
+
+Panduan Android, fingerprint SHA-1, status hosting, dan deployment Git yang
+memisahkan pemeriksaan baca-saja dari persetujuan migrasi/deploy tersedia di
+[`docs/google-android.md`](../docs/google-android.md). `npm run google:check`
+hanya memeriksa konfigurasi dan checksum migrasi; tidak mengubah database.
+
+Tambahkan `GOOGLE_CLIENT_IDS=<OAUTH_CLIENT_ID_WEB>` ke environment backend.
+Beberapa Client ID dipisahkan koma. Kosong berarti login Google dinonaktifkan.
+Frontend Laravel memakai `PRESENSI_GOOGLE_CLIENT_ID` dengan Client ID web yang sama.
+Client Secret tidak dipakai oleh alur Google Identity Services ini.
+
+Setelah deploy kode backend dari Git, pasang dependency dan jalankan migrasi
+baru **003_google_identity.sql** dan **004_google_password_compatibility.sql**
+melalui runner migrasi yang sudah tersedia:
+
+```sh
+npm ci --omit=dev --ignore-scripts
+npm run db:migrate
+```
+
+Restart service backend dengan mekanisme hosting yang digunakan. Jangan mengubah
+SQL 001/002 yang sudah berjalan atau menjalankan ulang skema arsip Supabase.
+Migrasi 003 menambah identitas Google dan challenge sekali pakai; akun/password
+lama tidak dihapus. Migrasi 004 memakai marker hash non-null yang tidak dapat
+dipakai untuk login password pada backend lama sekalipun. Akun Google baru
+memakainya sampai pemilik membuat kata sandi melalui web. Data tetap berada
+di schema `presensi`.
+Tinjau dan backup database sebelum menjalankan migrasi pada hosting produksi.
+
+Kontrak baru:
+
+| Metode | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | /api/auth/google/config | Status enabled, tanpa rahasia |
+| POST | /api/auth/google/challenge | JSON `{}`; nonce + expires_at, berlaku 5 menit |
+| POST | /api/auth/google | credential (Google ID token), nonce; existing_password jika menghubungkan akun lama |
+
+Token diverifikasi library Google resmi: signature, audience, issuer, expiry,
+email_verified, dan nonce. Challenge disimpan sebagai hash dan hanya dikonsumsi
+saat login berhasil. Subject Google dipetakan ke user_id presensi yang stabil.
+Email yang cocok dengan akun lama menghasilkan 409 `google_link_required`;
+password presensi lama wajib diverifikasi sebelum identitas ditautkan, termasuk
+untuk admin. Login Google tidak dapat memilih atau menaikkan role dari payload.
+
+Respons user menambah `has_password`. Akun baru dari Google selalu peserta dan
+bisa membuat password di web maksimal 10 menit setelah login Google. Endpoint
+password yang sama menerima new_password tanpa current_password hanya untuk
+akun Google yang belum mempunyai password dan sesi yang masih baru. Pembuatan/
+perubahan password mencabut semua sesi. Setelah itu akun tersebut bisa masuk di
+Android menggunakan email dan password, dengan user_id dan data yang sama.
+
+Tes Google memakai JWT RSA bertanda tangan lokal dan key verifikasi lokal pada
+library resmi Google, serta PostgreSQL PGlite. Tidak ada login Google nyata,
+pembacaan `.env`, atau perubahan database BPS saat `npm test`.

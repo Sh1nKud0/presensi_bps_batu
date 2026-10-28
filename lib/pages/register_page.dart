@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../main.dart';
 import '../theme/app_theme.dart';
+import '../widgets/google_sign_in_button.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -17,6 +18,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
+  bool _googleLoading = false;
   bool _obscurePassword = true;
 
   @override
@@ -151,7 +153,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 24),
 
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: _isLoading || _googleLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -162,6 +164,16 @@ class _RegisterPageState extends State<RegisterPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Daftar'),
+                ),
+                const SizedBox(height: 16),
+                GoogleSignInButton(
+                  enabled: !_isLoading,
+                  onBusyChanged: (busy) {
+                    if (mounted) setState(() => _googleLoading = busy);
+                  },
+                  onSignedIn: () {
+                    if (mounted) Navigator.of(context).pop();
+                  },
                 ),
               ],
             ),

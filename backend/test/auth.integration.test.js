@@ -44,10 +44,10 @@ test('migrasi PostgreSQL dan autentikasi API', async t => {
   let user, token;
 
   await t.test('migrasi membuat semua tabel tanpa auth Supabase dan aman diulang', async () => {
-    assert.deepEqual(await migrate(database), ['001_initial.sql', '002_notifications_files.sql']);
+    assert.deepEqual(await migrate(database), ['001_initial.sql', '002_notifications_files.sql', '003_google_identity.sql', '004_google_password_compatibility.sql']);
     assert.deepEqual(await migrate(database), []);
     const tables = (await database.query("SELECT tablename FROM pg_tables WHERE schemaname = 'presensi' ORDER BY tablename")).rows.map(row => row.tablename);
-    assert.deepEqual(tables, ['absen_susulan', 'absensi', 'files', 'hari_libur', 'izin', 'notifications', 'pembatalan_pulang', 'profiles', 'schema_migrations', 'sessions', 'users']);
+    assert.deepEqual(tables, ['absen_susulan', 'absensi', 'files', 'google_challenges', 'google_identities', 'hari_libur', 'izin', 'notifications', 'pembatalan_pulang', 'profiles', 'schema_migrations', 'sessions', 'users']);
     assert.equal((await database.query("SELECT to_regnamespace('auth') AS name")).rows[0].name, null);
   });
 

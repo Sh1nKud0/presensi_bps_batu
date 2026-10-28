@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 
 import '../main.dart';
 import 'register_page.dart';
+import '../widgets/google_sign_in_button.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -19,6 +20,7 @@ class _LoginPageState extends State<LoginPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _googleLoading = false;
   bool _obscurePassword = true;
 
   @override
@@ -163,7 +165,9 @@ class _LoginPageState extends State<LoginPage> {
 
                             // Tombol Login
                             ElevatedButton(
-                              onPressed: _isLoading ? null : _login,
+                              onPressed: _isLoading || _googleLoading
+                                  ? null
+                                  : _login,
                               style: ElevatedButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 14,
@@ -182,14 +186,26 @@ class _LoginPageState extends State<LoginPage> {
                             const SizedBox(height: 16),
 
                             // Link ke Register
-                            TextButton(
-                              onPressed: () {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(
-                                    builder: (context) => const RegisterPage(),
-                                  ),
-                                );
+                            GoogleSignInButton(
+                              enabled: !_isLoading,
+                              onBusyChanged: (busy) {
+                                if (mounted) {
+                                  setState(() => _googleLoading = busy);
+                                }
                               },
+                            ),
+                            const SizedBox(height: 8),
+                            TextButton(
+                              onPressed: _isLoading || _googleLoading
+                                  ? null
+                                  : () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              const RegisterPage(),
+                                        ),
+                                      );
+                                    },
                               child: const Text(
                                 'Belum punya akun? Daftar di sini',
                               ),

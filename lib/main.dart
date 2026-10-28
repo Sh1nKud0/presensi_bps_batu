@@ -12,6 +12,10 @@ export 'services/app_data.dart' show appData;
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
+/// Menyiapkan layanan lokal yang dibutuhkan sebelum widget aplikasi dibuat.
+///
+/// Inisialisasi binding dilakukan lebih dahulu karena konfigurasi notifikasi
+/// dan penyimpanan dapat menggunakan kanal platform sebelum `runApp`.
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -30,6 +34,7 @@ Future<void> main() async {
   runApp(const MyApp());
 }
 
+/// Root aplikasi yang memasang tema, navigasi awal, dan gerbang autentikasi.
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -53,7 +58,10 @@ class MyApp extends StatelessWidget {
   }
 }
 
-// Widget ini mengecek: kalau user sudah login -> MainShell, kalau belum -> LoginPage
+/// Memulihkan sesi tersimpan sebelum memilih halaman yang dapat diakses.
+///
+/// Pemeriksaan sesi dipisahkan dari splash screen agar animasi pembuka tidak
+/// menjadi syarat untuk memulai pemulihan autentikasi.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
   @override

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 
+/// Kegagalan permintaan API beserta pesan yang aman ditampilkan ke pengguna.
 class ApiException implements Exception {
   final String message;
   final int? status;
@@ -14,7 +15,10 @@ class ApiException implements Exception {
   String toString() => message;
 }
 
-/// Tokens are scoped to the API origin and kept in platform secure storage.
+/// Klien HTTP terautentikasi untuk backend PostgreSQL aplikasi.
+///
+/// Token sesi disimpan secara aman dan dipisahkan per origin API agar sesi
+/// dari server yang berbeda tidak pernah tertukar.
 class ApiClient extends ChangeNotifier {
   final Uri base;
   final http.Client transport;

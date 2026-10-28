@@ -1,9 +1,11 @@
 import 'rekap_presensi.dart';
 import 'app_data.dart';
 
+/// Menghasilkan kunci tanggal presensi hari ini dalam zona waktu kantor (WIB).
 String tanggalPresensiHariIni([DateTime? now]) =>
     tanggalRekap(waktuWib(now ?? DateTime.now()));
 
+/// Ringkasan presensi harian yang dipakai oleh beranda dan alur presensi.
 class DailyAttendance {
   final Map<String, dynamic>? attendance;
   final bool hasLeave;
@@ -49,6 +51,7 @@ class DailyAttendance {
   }
 }
 
+/// Mengambil dan mengirim perubahan presensi melalui backend aplikasi.
 class DailyAttendanceRepository {
   final AppData data;
   DailyAttendanceRepository({AppData? data}) : data = data ?? appData;

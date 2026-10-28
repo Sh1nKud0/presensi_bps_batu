@@ -10,7 +10,10 @@ const apiBaseUrl = String.fromEnvironment(
 );
 final appData = AppData();
 
-/// Application data is served exclusively by the PostgreSQL backend.
+/// Gerbang data aplikasi yang seluruhnya dilayani backend PostgreSQL.
+///
+/// Halaman memakai layanan ini agar detail HTTP, bentuk endpoint, dan unggahan
+/// bukti tetap terpusat dan konsisten.
 class AppData {
   final ApiClient api;
   AppData({ApiClient? client}) : api = client ?? ApiClient(apiBaseUrl);

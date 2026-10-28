@@ -2,6 +2,7 @@
 DateTime waktuWib(DateTime value) =>
     value.toUtc().add(const Duration(hours: 7));
 
+/// Memformat tanggal kalender sebagai kunci ISO `YYYY-MM-DD`.
 String tanggalRekap(DateTime value) => value.toIso8601String().substring(0, 10);
 
 String jamRekap(dynamic value) {
@@ -26,6 +27,7 @@ String statusPresensi(Map<String, dynamic> data) {
   };
 }
 
+/// Status dan waktu presensi satu peserta pada satu tanggal rekap.
 class HariRekap {
   final DateTime tanggal;
   final String status;
@@ -44,6 +46,7 @@ class HariRekap {
   });
 }
 
+/// Data peserta beserta status harian untuk periode rekap terpilih.
 class PesertaRekap {
   final Map<String, dynamic> profil;
   final List<HariRekap> hari;
@@ -57,6 +60,7 @@ class PesertaRekap {
       hadir + jumlah('Izin') + jumlah('Sakit') + jumlah('Dispensasi');
 }
 
+/// Hasil rekap presensi lintas peserta yang siap ditampilkan atau diekspor.
 class RekapPresensi {
   final int bulan;
   final int tahun;

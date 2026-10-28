@@ -9,6 +9,10 @@ import 'tabs/absen_tab.dart';
 import 'tabs/riwayat_tab.dart';
 import 'tabs/profil_tab.dart';
 
+/// Kerangka navigasi utama yang mempertahankan state antar-tab pengguna.
+///
+/// Tab tetap berada di pohon widget saat berpindah agar form dan posisi
+/// gulir tidak hilang setiap kali pengguna membuka bagian lain.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 

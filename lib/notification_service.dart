@@ -2,6 +2,10 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 
+/// Mengatur pengingat presensi lokal pada perangkat pengguna.
+///
+/// Jadwal memakai zona waktu `Asia/Jakarta`, sehingga jam pengingat mengikuti
+/// jam kerja kantor walaupun konfigurasi zona perangkat berbeda.
 class NotificationService {
   NotificationService._();
   static final NotificationService instance = NotificationService._();

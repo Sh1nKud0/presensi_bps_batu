@@ -3,6 +3,53 @@
 Aplikasi Flutter untuk presensi peserta magang, pengajuan izin/sakit/susulan,
 persetujuan admin, pembatalan jam pulang, notifikasi dalam aplikasi, dan rekap Excel.
 
+## Struktur proyek
+
+```text
+lib/
+├── main.dart                 # Bootstrap aplikasi dan pemulihan sesi
+├── notification_service.dart # Pengingat lokal presensi
+├── pages/                    # Alur layar peserta dan admin
+│   └── tabs/                 # Beranda, presensi, riwayat, dan profil
+├── services/                 # Klien API, autentikasi, data, dan aturan bisnis
+├── theme/                    # Palet, tema, serta pengendali mode tampilan
+└── widgets/                  # Komponen UI bersama dan komponen admin
+assets/images/                # Logo BPS dan aset autentikasi
+backend/                      # Server Node.js yang mengakses PostgreSQL
+database/                     # Catatan dan arsip skema database
+docs/                         # Dokumen pendukung proyek
+test/                         # Pengujian unit dan widget Flutter
+tool/                         # Skrip pemeliharaan aset
+```
+
+### Fitur utama
+
+- **Peserta:** autentikasi, presensi lokasi, pengajuan izin/sakit dan presensi
+  susulan, pembatalan presensi pulang, riwayat kalender, serta profil.
+- **Admin:** dashboard kehadiran harian, tinjauan pengajuan, notifikasi, dan
+  ekspor rekap ke Excel.
+- **Layanan bersama:** komunikasi ke backend PostgreSQL, penyimpanan token
+  terproteksi, pemilihan bukti foto, peta lokasi, tema terang/gelap, serta
+  pengingat lokal.
+
+## Prasyarat
+
+- Flutter SDK yang menyertakan Dart SDK **3.13.2 atau lebih baru** (sesuai
+  batas `environment.sdk` pada `pubspec.yaml`). Nomor versi Flutter spesifik
+  tidak dipatok oleh proyek.
+- Android Studio atau Android SDK untuk menjalankan di emulator/perangkat
+  Android; backend Node.js dan PostgreSQL diperlukan untuk alur data langsung.
+
+Ambil dependensi dan jalankan aplikasi dari direktori utama:
+
+```sh
+flutter pub get
+flutter run
+```
+
+Untuk penggunaan dengan backend lokal, ikuti petunjuk koneksi PostgreSQL dan
+penyiapan perangkat pada bagian berikut.
+
 ## Koneksi PostgreSQL
 
 Aplikasi hanya memakai backend Node.js dan PostgreSQL BPS, schema `presensi`.

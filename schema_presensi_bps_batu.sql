@@ -1,3 +1,6 @@
+-- ARSIP SUPABASE: tidak digunakan aplikasi saat ini.
+-- Skema PostgreSQL aktif dikelola melalui backend/migrations dan npm run db:migrate.
+
 -- ============================================
 -- SKEMA DATABASE: PRESENSI BPS KOTA BATU
 -- ============================================

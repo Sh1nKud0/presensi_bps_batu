@@ -1,10 +1,13 @@
+import '../../widgets/adaptive_tiles.dart';
+import '../../widgets/glass_surface.dart';
+
 import 'package:flutter/material.dart';
+
 import '../../main.dart';
 import '../../theme/app_theme.dart';
-import '../login_page.dart';
+import '../../widgets/theme_switch_tile.dart';
 import '../izin_page.dart';
 import 'absen_susulan_page.dart';
-import '../admin_dashboard_page.dart';
 import 'edit_profil_page.dart';
 import 'ganti_password_page.dart';
 
@@ -32,18 +35,20 @@ class _ProfilTabState extends State<ProfilTab> {
   Future<void> _muatProfil() async {
     setState(() => _loading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final profile = await supabase.from('profiles').select().eq('id', userId).single();
+      final profile = await appData.profile();
 
-      final absensi = await supabase.from('absensi').select().eq('user_id', userId).not('jam_masuk', 'is', null);
-      final izin = await supabase.from('izin').select().eq('user_id', userId).eq('status_persetujuan', 'disetujui');
+      final isAdmin = profile['role'] == 'admin';
+      final counts = isAdmin
+          ? <String, dynamic>{'hadir': 0, 'izin': 0}
+          : await appData.api.json('GET', '/api/me/statistics');
+      if (!mounted) return;
 
       setState(() {
         _nama = profile['nama_lengkap'] ?? '-';
         _asalInstansi = profile['asal_instansi'] ?? '-';
-        _isAdmin = profile['role'] == 'admin';
-        _totalHadir = (absensi as List).length;
-        _totalIzin = (izin as List).length;
+        _isAdmin = isAdmin;
+        _totalHadir = counts['hadir'] as int;
+        _totalIzin = counts['izin'] as int;
       });
     } catch (e) {
       debugPrint('Gagal muat profil: $e');
@@ -53,12 +58,15 @@ class _ProfilTabState extends State<ProfilTab> {
   }
 
   Future<void> _logout() async {
-    await supabase.auth.signOut();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (context) => const LoginPage()),
-      (route) => false,
-    );
+    try {
+      await appData.logout();
+    } catch (error) {
+      if (mounted && appData.loggedIn) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Logout belum berhasil: $error')),
+        );
+      }
+    }
   }
 
   @override
@@ -76,13 +84,9 @@ class _ProfilTabState extends State<ProfilTab> {
           const SizedBox(height: 16),
 
           // Header profil
-          Container(
+          GlassSurface(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
-            ),
+            radius: 24,
             child: Column(
               children: [
                 Container(
@@ -90,28 +94,50 @@ class _ProfilTabState extends State<ProfilTab> {
                   height: 88,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppColors.secondaryContainer,
+                    color: context.appColors.secondaryContainer,
                   ),
-                  child: Icon(Icons.person, size: 44, color: AppColors.primary),
+                  child: Icon(
+                    Icons.person,
+                    size: 44,
+                    color: context.appColors.primary,
+                  ),
                 ),
                 const SizedBox(height: 12),
-                Text(_nama, style: AppText.headlineSm),
+                Text(
+                  _nama,
+                  textAlign: TextAlign.center,
+                  style: AppText.headlineSm,
+                ),
                 const SizedBox(height: 4),
-                Text(_isAdmin ? 'Admin / Pembimbing' : 'Peserta Magang', style: AppText.bodyMd.copyWith(color: AppColors.secondary)),
+                Text(
+                  _isAdmin ? 'Admin / Pembimbing' : 'Peserta Magang',
+                  style: AppText.bodyMd.copyWith(
+                    color: context.appColors.secondary,
+                  ),
+                ),
                 if (_asalInstansi.isNotEmpty && _asalInstansi != '-') ...[
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
+                      color: context.appColors.surfaceContainerLow,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.business, size: 16, color: AppColors.primary),
+                        Icon(
+                          Icons.business,
+                          size: 16,
+                          color: context.appColors.primary,
+                        ),
                         const SizedBox(width: 6),
-                        Text(_asalInstansi, style: AppText.labelMd),
+                        Flexible(
+                          child: Text(_asalInstansi, style: AppText.labelMd),
+                        ),
                       ],
                     ),
                   ),
@@ -121,64 +147,58 @@ class _ProfilTabState extends State<ProfilTab> {
           ),
           const SizedBox(height: 16),
 
-          // Statistik bento
-          Row(
+          if (!_isAdmin) AdaptiveTiles(
+            minTileWidth: 140,
             children: [
-              Expanded(
-                child: _statKartu(
-                  icon: Icons.check_circle,
-                  iconColor: AppColors.tertiaryContainer,
-                  label: 'Hadir',
-                  value: _totalHadir,
-                ),
+              _statKartu(
+                icon: Icons.check_circle,
+                iconColor: context.appColors.tertiaryContainer,
+                label: 'Hadir',
+                value: _totalHadir,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _statKartu(
-                  icon: Icons.pending_actions,
-                  iconColor: AppColors.secondary,
-                  label: 'Izin/Sakit',
-                  value: _totalIzin,
-                ),
+              _statKartu(
+                icon: Icons.pending_actions,
+                iconColor: context.appColors.secondary,
+                label: 'Izin/Sakit',
+                value: _totalIzin,
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          if (!_isAdmin) const SizedBox(height: 16),
 
           // Menu pengaturan
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
-            ),
-            clipBehavior: Clip.antiAlias,
+          GlassSurface(
+            radius: 24,
             child: Column(
               children: [
-                _menuHeader('AKTIVITAS'),
-                _menuItem(
+                if (!_isAdmin) _menuHeader('AKTIVITAS'),
+                if (!_isAdmin) _menuItem(
                   icon: Icons.event_busy,
                   label: 'Izin / Sakit',
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const IzinPage())),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const IzinPage()),
+                  ),
                 ),
-                _menuItem(
+                if (!_isAdmin) _menuItem(
                   icon: Icons.history_toggle_off,
                   label: 'Absen Susulan',
-                  onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AbsenSusulanPage())),
-                ),
-                if (_isAdmin)
-                  _menuItem(
-                    icon: Icons.admin_panel_settings,
-                    label: 'Dashboard Admin',
-                    onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => const AdminDashboardPage())),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const AbsenSusulanPage(),
+                    ),
                   ),
+                ),
+                _menuHeader('TAMPILAN'),
+                const ThemeSwitchTile(),
                 _menuHeader('PENGATURAN AKUN'),
                 _menuItem(
                   icon: Icons.edit,
                   label: 'Edit Profil',
                   onTap: () async {
                     final berubah = await Navigator.of(context).push<bool>(
-                      MaterialPageRoute(builder: (context) => const EditProfilPage()),
+                      MaterialPageRoute(
+                        builder: (context) => const EditProfilPage(),
+                      ),
                     );
                     if (berubah == true) _muatProfil();
                   },
@@ -187,20 +207,26 @@ class _ProfilTabState extends State<ProfilTab> {
                   icon: Icons.lock,
                   label: 'Keamanan',
                   onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (context) => const GantiPasswordPage()),
+                    MaterialPageRoute(
+                      builder: (context) => const GantiPasswordPage(),
+                    ),
                   ),
                 ),
-                _menuItem(icon: Icons.info, label: 'Tentang Aplikasi', onTap: () {
-                  showAboutDialog(
-                    context: context,
-                    applicationName: 'Presensi BPS Kota Batu',
-                    applicationVersion: '1.0.0',
-                  );
-                }),
+                _menuItem(
+                  icon: Icons.info,
+                  label: 'Tentang Aplikasi',
+                  onTap: () {
+                    showAboutDialog(
+                      context: context,
+                      applicationName: 'magang presensi bps Batu',
+                      applicationVersion: '1.0.1',
+                    );
+                  },
+                ),
                 _menuItem(
                   icon: Icons.logout,
                   label: 'Keluar',
-                  color: AppColors.error,
+                  color: context.appColors.error,
                   onTap: _logout,
                   isLast: true,
                 ),
@@ -213,14 +239,15 @@ class _ProfilTabState extends State<ProfilTab> {
     );
   }
 
-  Widget _statKartu({required IconData icon, required Color iconColor, required String label, required int value}) {
-    return Container(
+  Widget _statKartu({
+    required IconData icon,
+    required Color iconColor,
+    required String label,
+    required int value,
+  }) {
+    return GlassSurface(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.surfaceVariant),
-      ),
+      radius: 24,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -228,17 +255,21 @@ class _ProfilTabState extends State<ProfilTab> {
             children: [
               Icon(icon, color: iconColor, size: 20),
               const SizedBox(width: 6),
-              Text(label, style: AppText.labelMd),
+              Expanded(child: Text(label, style: AppText.labelMd)),
             ],
           ),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('$value', style: AppText.displayLg),
               const SizedBox(width: 6),
-              Text('Hari', style: AppText.bodyMd.copyWith(color: AppColors.secondary)),
+              Text(
+                'Hari',
+                style: AppText.bodyMd.copyWith(
+                  color: context.appColors.secondary,
+                ),
+              ),
             ],
           ),
         ],
@@ -250,8 +281,11 @@ class _ProfilTabState extends State<ProfilTab> {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: AppColors.surfaceContainerLow,
-      child: Text(text, style: AppText.labelMd.copyWith(color: AppColors.secondary)),
+      color: context.appColors.surfaceContainerLow,
+      child: Text(
+        text,
+        style: AppText.labelMd.copyWith(color: context.appColors.secondary),
+      ),
     );
   }
 
@@ -267,19 +301,36 @@ class _ProfilTabState extends State<ProfilTab> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          border: isLast ? null : Border(bottom: BorderSide(color: AppColors.surfaceVariant)),
+          border: isLast
+              ? null
+              : Border(
+                  bottom: BorderSide(color: context.appColors.surfaceVariant),
+                ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                Icon(icon, color: color ?? AppColors.primary),
-                const SizedBox(width: 16),
-                Text(label, style: AppText.bodyLg.copyWith(color: color ?? AppColors.onSurface)),
-              ],
+            Expanded(
+              child: Row(
+                children: [
+                  Icon(icon, color: color ?? context.appColors.primary),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: AppText.bodyLg.copyWith(
+                        color: color ?? context.appColors.onSurface,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
-            if (color == null) Icon(Icons.chevron_right, color: AppColors.outlineVariant),
+            if (color == null)
+              Icon(
+                Icons.chevron_right,
+                color: context.appColors.outlineVariant,
+              ),
           ],
         ),
       ),

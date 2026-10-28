@@ -1,58 +1,87 @@
+import '../../widgets/adaptive_tiles.dart';
+import '../../widgets/glass_surface.dart';
+import '../pembatalan_pulang_page.dart';
+import '../../services/checkout_cancellation.dart';
 import 'package:flutter/material.dart';
 import '../../main.dart';
+import '../../services/daily_attendance.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/request_notifications_button.dart';
 
 class BerandaTab extends StatefulWidget {
   final VoidCallback onAbsenTap;
-  const BerandaTab({super.key, required this.onAbsenTap});
+  final bool isActive;
+  const BerandaTab({super.key, required this.onAbsenTap, this.isActive = true});
 
   @override
   State<BerandaTab> createState() => _BerandaTabState();
 }
 
-class _BerandaTabState extends State<BerandaTab> {
+class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
   bool _loading = true;
+  DailyAttendance? _daily;
+  String? _attendanceError;
   Map<String, dynamic>? _absensiHariIni;
   String _namaUser = '';
+  bool _isAdmin = false;
+  bool _profileLoaded = false;
+  bool _refreshing = false;
   bool _hariLibur = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _muatData();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant BerandaTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isActive && !oldWidget.isActive) _muatData();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && widget.isActive) _muatData();
+  }
+
   Future<void> _muatData() async {
+    if (_refreshing) return;
+    _refreshing = true;
     setState(() => _loading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final today = DateTime.now().toIso8601String().substring(0, 10);
+      final userId = appData.userId!;
 
-      final profile = await supabase.from('profiles').select('nama_lengkap').eq('id', userId).single();
-
-      final absensiHariIni = await supabase
-          .from('absensi')
-          .select()
-          .eq('user_id', userId)
-          .eq('tanggal', today)
-          .maybeSingle();
-
-      // Cek apakah hari ini libur (weekend atau hari libur admin) - supaya reminder tidak muncul
-      final now = DateTime.now();
-      bool hariLibur = now.weekday == DateTime.saturday || now.weekday == DateTime.sunday;
-      if (!hariLibur) {
-        final libur = await supabase.from('hari_libur').select().eq('tanggal', today).maybeSingle();
-        hariLibur = libur != null;
+      if (!_profileLoaded) {
+        final profile = await appData.profile();
+        if (!mounted) return;
+        setState(() {
+          _profileLoaded = true;
+          _isAdmin = profile['role'] == 'admin';
+          _namaUser = profile['nama_lengkap'] ?? 'Peserta';
+        });
       }
 
+      final daily = await DailyAttendanceRepository().load(userId);
+      if (!mounted) return;
       setState(() {
-        _namaUser = profile['nama_lengkap'] ?? 'Peserta';
-        _absensiHariIni = absensiHariIni;
-        _hariLibur = hariLibur;
+        _daily = daily;
+        _attendanceError = null;
+        _absensiHariIni = daily.attendance;
+        _hariLibur = daily.holiday;
       });
     } catch (e) {
       debugPrint('Gagal muat data beranda: $e');
+      if (mounted) setState(() => _attendanceError = 'Status presensi belum dapat dimuat. Tarik untuk mencoba lagi.');
     } finally {
+      _refreshing = false;
       if (mounted) setState(() => _loading = false);
     }
   }
@@ -78,6 +107,7 @@ class _BerandaTabState extends State<BerandaTab> {
     final sudahPulang = _absensiHariIni != null && _absensiHariIni!['jam_pulang'] != null;
     final durasi = _durasiKerja();
     final jamKerjaPenuh = durasi.inHours >= 8;
+    final blocked = _attendanceError ?? _daily?.blockReason;
 
     return RefreshIndicator(
       onRefresh: _muatData,
@@ -100,31 +130,43 @@ class _BerandaTabState extends State<BerandaTab> {
                     height: 40,
                     width: 40,
                     decoration: BoxDecoration(
-                      color: AppColors.secondaryContainer,
+                      color: context.appColors.secondaryContainer,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.account_balance, color: AppColors.primary, size: 22),
+                    child: Icon(Icons.account_balance, color: context.appColors.primary, size: 22),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Presensi Magang',
+                  'magang presensi bps Batu',
                   style: AppText.headlineMdMobile.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),
+              if (_profileLoaded && appData.loggedIn)
+                RequestNotificationsButton(
+                  key: ValueKey('${appData.userId!}/$_isAdmin'),
+                  userId: appData.userId!,
+                  isAdmin: _isAdmin,
+                )
+              else
+                const IconButton(
+                  tooltip: 'Memuat notifikasi',
+                  onPressed: null,
+                  icon: Icon(Icons.notifications_outlined),
+                ),
             ],
           ),
           const SizedBox(height: 8),
-          RichText(
-            text: TextSpan(
-              style: AppText.bodyLg.copyWith(fontSize: 16),
+          Text.rich(
+            TextSpan(
+              style: AppText.bodyLg.copyWith(fontSize: 16, color: context.appColors.onSurface),
               children: [
                 const TextSpan(text: 'Halo, '),
                 TextSpan(
                   text: _namaUser.isEmpty ? 'Peserta' : _namaUser,
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: context.appColors.primary, fontWeight: FontWeight.w700),
                 ),
                 const TextSpan(text: ' 👋'),
               ],
@@ -135,13 +177,9 @@ class _BerandaTabState extends State<BerandaTab> {
           const SizedBox(height: 24),
 
           // Kartu status hari ini (tanpa badge tanggal di header)
-          Container(
+          GlassSurface(
             padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surfaceContainerLowest,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppColors.surfaceVariant),
-            ),
+            radius: 24,
             child: Column(
               children: [
                 Align(
@@ -154,41 +192,33 @@ class _BerandaTabState extends State<BerandaTab> {
                     _formatTanggalLengkap(),
                     textAlign: TextAlign.center,
                     style: AppText.headlineSm.copyWith(
-                      color: AppColors.primary,
+                      color: context.appColors.primary,
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ),
                 const SizedBox(height: 16),
-                Row(
+                AdaptiveTiles(minTileWidth: 88, maxColumns: 3,
                   children: [
-                    Expanded(
-                      child: _statusKolom(
+                    _statusKolom(
                         icon: Icons.login,
-                        iconColor: AppColors.tertiaryContainer,
+                        iconColor: context.appColors.tertiaryContainer,
                         value: _formatJam(_absensiHariIni?['jam_masuk']),
                         label: 'Masuk',
-                      ),
                     ),
-                    Container(width: 1, height: 48, color: AppColors.surfaceVariant),
-                    Expanded(
-                      child: _statusKolom(
+                    _statusKolom(
                         icon: Icons.logout,
-                        iconColor: sudahPulang ? AppColors.secondary : AppColors.outline,
+                        iconColor: sudahPulang ? context.appColors.secondary : context.appColors.outline,
                         value: _formatJam(_absensiHariIni?['jam_pulang']),
                         label: 'Pulang',
-                      ),
                     ),
-                    Container(width: 1, height: 48, color: AppColors.surfaceVariant),
-                    Expanded(
-                      child: _statusKolom(
+                    _statusKolom(
                         icon: jamKerjaPenuh ? Icons.flag_circle : Icons.schedule,
-                        iconColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
+                        iconColor: jamKerjaPenuh ? context.appColors.tertiaryContainer : context.appColors.primary,
                         value: '${durasi.inHours}j ${durasi.inMinutes % 60}m',
                         label: jamKerjaPenuh ? 'Kerja • 8j+' : 'Kerja',
-                        valueColor: jamKerjaPenuh ? AppColors.tertiaryContainer : AppColors.primary,
-                      ),
+                        valueColor: jamKerjaPenuh ? context.appColors.tertiaryContainer : context.appColors.primary,
                     ),
                   ],
                 ),
@@ -198,37 +228,50 @@ class _BerandaTabState extends State<BerandaTab> {
           const SizedBox(height: 24),
 
           // Tombol utama
-          SizedBox(
-            height: 64,
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 64),
             child: ElevatedButton.icon(
-              onPressed: sudahMasuk && sudahPulang ? null : widget.onAbsenTap,
+              onPressed: _loading || blocked != null || _daily == null ? null : widget.onAbsenTap,
               icon: const Icon(Icons.fingerprint, size: 28),
               label: Text(
-                sudahMasuk && sudahPulang ? 'Presensi Hari Ini Selesai' : 'Absen Sekarang',
-                style: AppText.headlineSm.copyWith(color: Colors.white),
+                _loading ? 'Memeriksa presensi...' : blocked != null ? 'Presensi tidak tersedia' : sudahMasuk ? 'Absen Pulang' : 'Absen Sekarang',
+                style: AppText.headlineSm.copyWith(color: context.appColors.onPrimary),
               ),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
+                backgroundColor: context.appColors.primary,
+                foregroundColor: context.appColors.onPrimary,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 elevation: 0,
               ),
             ),
           ),
 
+          if (blocked != null && !_loading) ...[
+            const SizedBox(height: 12),
+            Text(blocked, style: TextStyle(color: context.appColors.onSurfaceVariant)),
+          ],
+          if (canCancelCheckout(_absensiHariIni, hasActiveRequest: _daily?.requestBlockReason != null))
+            OutlinedButton.icon(
+              onPressed: () async {
+                await Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => const PembatalanPulangPage()));
+                if (mounted) await _muatData();
+              },
+              icon: const Icon(Icons.undo),
+              label: const Text('Ajukan Pembatalan Absen Pulang'),
+            ),
           // Reminder: belum absen masuk, sudah lewat jam 08:00, dan bukan hari libur
-          if (!_loading && !sudahMasuk && !_hariLibur && DateTime.now().hour >= 8) ...[
+          if (!_loading && blocked == null && !sudahMasuk && !_hariLibur && DateTime.now().hour >= 8) ...[
             const SizedBox(height: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.errorContainer.withOpacity(0.6),
+                color: context.appColors.errorContainer.withValues(alpha: 0.6),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.error.withOpacity(0.3)),
+                border: Border.all(color: context.appColors.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.notification_important, color: AppColors.error, size: 22),
+                  Icon(Icons.notification_important, color: context.appColors.error, size: 22),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Column(
@@ -237,14 +280,14 @@ class _BerandaTabState extends State<BerandaTab> {
                         Text(
                           'Anda belum absen hari ini!',
                           style: AppText.bodyMd.copyWith(
-                            color: AppColors.onErrorContainer,
+                            color: context.appColors.onErrorContainer,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Segera lakukan presensi. Jika ada kendala (dinas luar/GPS error), ajukan Absen Susulan di menu Profil.',
-                          style: AppText.bodyMd.copyWith(color: AppColors.onErrorContainer, fontSize: 12),
+                          'Segera lakukan presensi. Jika ada kendala (kegiatan di luar BPS/GPS error), ajukan Absen Susulan di menu Profil.',
+                          style: AppText.bodyMd.copyWith(color: context.appColors.onErrorContainer, fontSize: 12),
                         ),
                       ],
                     ),
@@ -259,17 +302,17 @@ class _BerandaTabState extends State<BerandaTab> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: AppColors.hadirBg,
+                color: context.appColors.hadirBg,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.flag_circle, color: AppColors.hadirText, size: 20),
+                  Icon(Icons.flag_circle, color: context.appColors.hadirText, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Target jam kerja hari ini sudah tercapai (8 jam+).',
-                      style: AppText.bodyMd.copyWith(color: AppColors.hadirText, fontSize: 12),
+                      style: AppText.bodyMd.copyWith(color: context.appColors.hadirText, fontSize: 12),
                     ),
                   ),
                 ],
@@ -302,9 +345,9 @@ class _BerandaTabState extends State<BerandaTab> {
       children: [
         Icon(icon, color: iconColor, size: 22),
         const SizedBox(height: 4),
-        Text(value, style: AppText.headlineSm.copyWith(color: valueColor ?? AppColors.onSurface)),
+        Text(value, textAlign: TextAlign.center, style: AppText.headlineSm.copyWith(color: valueColor ?? context.appColors.onSurface)),
         const SizedBox(height: 2),
-        Text(label, style: AppText.labelMd.copyWith(fontSize: 11)),
+        Text(label, textAlign: TextAlign.center, style: AppText.labelMd.copyWith(fontSize: 11)),
       ],
     );
   }

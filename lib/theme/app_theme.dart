@@ -1,13 +1,69 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+
+/// Resolve colors from the nearest Theme so open pages update immediately
+/// when the device changes between light and dark mode.
+extension AppThemeContext on BuildContext {
+  AppPalette get appColors => AppPalette(Theme.of(this).colorScheme);
+}
+
+class AppPalette {
+  final ColorScheme scheme;
+  const AppPalette(this.scheme);
+  bool get isDark => scheme.brightness == Brightness.dark;
+  Color get primary => scheme.primary;
+  Color get primaryContainer => scheme.primaryContainer;
+  Color get onPrimary => scheme.onPrimary;
+  Color get secondary => scheme.secondary;
+  Color get secondaryContainer => scheme.secondaryContainer;
+  Color get onSecondaryContainer => scheme.onSecondaryContainer;
+  Color get tertiary => scheme.tertiary;
+  // Existing pages use this token for success icons and text.
+  Color get tertiaryContainer =>
+      isDark ? hadirText : AppColors.tertiaryContainer;
+  Color get tertiaryFixedDim => scheme.tertiaryFixedDim;
+  Color get background => scheme.surface;
+  Color get surfaceContainerLowest => scheme.surfaceContainerLowest;
+  Color get surfaceContainerLow => scheme.surfaceContainerLow;
+  Color get surfaceContainer => scheme.surfaceContainer;
+  Color get surfaceContainerHigh => scheme.surfaceContainerHigh;
+  Color get surfaceVariant => scheme.outlineVariant;
+  Color get outline => scheme.outline;
+  Color get outlineVariant => scheme.outlineVariant;
+  Color get onSurface => scheme.onSurface;
+  Color get onSurfaceVariant => scheme.onSurfaceVariant;
+  Color get error => scheme.error;
+  Color get errorContainer => scheme.errorContainer;
+  Color get onErrorContainer => scheme.onErrorContainer;
+  Color get hadirBg => isDark ? const Color(0xFF183C2A) : AppColors.hadirBg;
+  Color get hadirText => isDark ? const Color(0xFF8EDBA9) : AppColors.hadirText;
+  Color get izinBg => isDark ? const Color(0xFF44351B) : AppColors.izinBg;
+  Color get izinText =>
+      isDark ? const Color(0xFFFFCC80) : const Color(0xFF9A5200);
+  Color get dispensasiBg =>
+      isDark ? const Color(0xFF123C45) : const Color(0xFFCFFAFE);
+  Color get dispensasiText =>
+      isDark ? const Color(0xFF80DEEA) : const Color(0xFF00677A);
+  Color get liburBg =>
+      isDark ? const Color(0xFF35264B) : const Color(0xFFF3E8FF);
+  Color get liburText =>
+      isDark ? const Color(0xFFD0B4FF) : const Color(0xFF7C3AED);
+  Color get sakitBg =>
+      isDark ? const Color(0xFF392F49) : const Color(0xFFE4DFEC);
+  Color get sakitText =>
+      isDark ? const Color(0xFFD0B4E9) : const Color(0xFF674EA7);
+  Color get pengajuanText =>
+      isDark ? const Color(0xFFFFA6CD) : const Color(0xFFDB2777);
+}
 
 class AppColors {
-  static const primary = Color(0xFF00288E);
-  static const primaryContainer = Color(0xFF1E40AF);
+  static const primary = Color(0xFF1E40AF);
+  static const primaryContainer = Color(0xFF3158BF);
   static const onPrimary = Color(0xFFFFFFFF);
 
   static const secondary = Color(0xFF505F76);
   static const secondaryContainer = Color(0xFFD0E1FB);
-  static const onSecondaryContainer = Color(0xFF54647A);
+  static const onSecondaryContainer = Color(0xFF344763);
 
   static const tertiary = Color(0xFF003D27);
   static const tertiaryContainer = Color(0xFF00563A);
@@ -23,8 +79,8 @@ class AppColors {
   static const outline = Color(0xFF757684);
   static const outlineVariant = Color(0xFFC4C5D5);
 
-  static const onSurface = Color(0xFF191C1E);
-  static const onSurfaceVariant = Color(0xFF444653);
+  static const onSurface = Color(0xFF191C20);
+  static const onSurfaceVariant = Color(0xFF444B55);
 
   static const error = Color(0xFFBA1A1A);
   static const errorContainer = Color(0xFFFFDAD6);
@@ -42,50 +98,157 @@ class AppText {
     fontSize: 20,
     height: 1.4,
     fontWeight: FontWeight.w600,
-    color: AppColors.onSurface,
   );
   static const headlineSm = TextStyle(
     fontSize: 20,
     height: 1.4,
     fontWeight: FontWeight.w600,
-    color: AppColors.onSurface,
   );
   static const bodyLg = TextStyle(
     fontSize: 16,
     height: 1.5,
     fontWeight: FontWeight.w400,
-    color: AppColors.onSurface,
   );
   static const bodyMd = TextStyle(
     fontSize: 14,
     height: 1.4,
     fontWeight: FontWeight.w400,
-    color: AppColors.onSurfaceVariant,
   );
   static const labelMd = TextStyle(
     fontSize: 12,
     height: 1.3,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.6,
-    color: AppColors.onSurfaceVariant,
   );
   static const displayLg = TextStyle(
     fontSize: 32,
     height: 1.25,
     fontWeight: FontWeight.w700,
     letterSpacing: -0.6,
-    color: AppColors.onSurface,
   );
 }
 
-ThemeData buildAppTheme() {
+ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
+  final isDark = brightness == Brightness.dark;
+  final scheme =
+      ColorScheme.fromSeed(
+        seedColor: AppColors.primary,
+        brightness: brightness,
+      ).copyWith(
+        primary: isDark ? const Color(0xFFAEC6FF) : AppColors.primary,
+        onPrimary: isDark ? const Color(0xFF002B75) : AppColors.onPrimary,
+        secondary: isDark ? const Color(0xFFBAC8DF) : AppColors.secondary,
+        secondaryContainer: isDark
+            ? const Color(0xFF35455E)
+            : AppColors.secondaryContainer,
+        onSecondaryContainer: isDark
+            ? const Color(0xFFD0E1FB)
+            : AppColors.onSecondaryContainer,
+        surface: isDark ? const Color(0xFF111418) : AppColors.background,
+        surfaceContainerLowest: isDark
+            ? const Color(0xFF191D23)
+            : AppColors.surfaceContainerLowest,
+        surfaceContainerLow: isDark
+            ? const Color(0xFF1D2127)
+            : AppColors.surfaceContainerLow,
+        surfaceContainer: isDark
+            ? const Color(0xFF23272E)
+            : AppColors.surfaceContainer,
+        surfaceContainerHigh: isDark
+            ? const Color(0xFF2B3038)
+            : AppColors.surfaceContainerHigh,
+        onSurface: isDark ? const Color(0xFFE3E7EE) : AppColors.onSurface,
+        onSurfaceVariant: isDark
+            ? const Color(0xFFBDC5D2)
+            : AppColors.onSurfaceVariant,
+        outlineVariant: isDark
+            ? const Color(0xFF414751)
+            : AppColors.surfaceVariant,
+      );
   return ThemeData(
     useMaterial3: true,
-    scaffoldBackgroundColor: AppColors.background,
-    colorScheme: ColorScheme.fromSeed(
-      seedColor: AppColors.primary,
-      primary: AppColors.primary,
-      surface: AppColors.background,
+    brightness: brightness,
+    scaffoldBackgroundColor: Colors.transparent,
+    colorScheme: scheme,
+    appBarTheme: AppBarTheme(
+      backgroundColor: scheme.surface.withValues(alpha: 0.88),
+      foregroundColor: scheme.onSurface,
+      elevation: 0,
+      scrolledUnderElevation: 0,
+      surfaceTintColor: Colors.transparent,
+      shape: Border(
+        bottom: BorderSide(color: scheme.outlineVariant.withValues(alpha: 0.4)),
+      ),
+      systemOverlayStyle: isDark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
+    ),
+    cardTheme: CardThemeData(
+      color: scheme.surfaceContainerLowest.withValues(alpha: 0.82),
+      surfaceTintColor: Colors.transparent,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: isDark ? Colors.white.withValues(alpha: 0.13) : Colors.white,
+        ),
+      ),
+    ),
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: scheme.surface.withValues(alpha: 0.94),
+      surfaceTintColor: Colors.transparent,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+      ),
+      clipBehavior: Clip.antiAlias,
+    ),
+    dialogTheme: DialogThemeData(
+      backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.98),
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+    ),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: scheme.surfaceContainerLowest.withValues(alpha: 0.65),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(18)),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(
+          color: scheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(18),
+        borderSide: BorderSide(color: scheme.primary, width: 1.5),
+      ),
+    ),
+    snackBarTheme: const SnackBarThemeData(
+      backgroundColor: Color(0xFF323842),
+      contentTextStyle: TextStyle(color: Colors.white),
+    ),
+    elevatedButtonTheme: ElevatedButtonThemeData(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        elevation: 0,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      ),
+    ),
+    outlinedButtonTheme: OutlinedButtonThemeData(
+      style: OutlinedButton.styleFrom(
+        backgroundColor: scheme.surfaceContainerLowest.withValues(alpha: 0.38),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        side: BorderSide(color: scheme.outlineVariant),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      ),
     ),
     fontFamily: 'Inter',
   );

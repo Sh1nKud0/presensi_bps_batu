@@ -1,10 +1,18 @@
+import '../widgets/glass_bottom_navigation.dart';
+
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+
+import '../main.dart';
+import 'admin_dashboard_page.dart';
 import 'tabs/beranda_tab.dart';
 import 'tabs/absen_tab.dart';
 import 'tabs/riwayat_tab.dart';
 import 'tabs/profil_tab.dart';
 
+/// Kerangka navigasi utama yang mempertahankan state antar-tab pengguna.
+///
+/// Tab tetap berada di pohon widget saat berpindah agar form dan posisi
+/// gulir tidak hilang setiap kali pengguna membuka bagian lain.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -14,6 +22,23 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
+  bool? _isAdmin;
+
+  @override
+  void initState() {
+    super.initState();
+    _muatRole();
+  }
+
+  Future<void> _muatRole() async {
+    try {
+      final profile = await appData.profile();
+      if (mounted) setState(() => _isAdmin = profile['role'] == 'admin');
+    } catch (e) {
+      debugPrint('Gagal memuat role pengguna: $e');
+      if (mounted) setState(() => _isAdmin = false);
+    }
+  }
 
   // Dipanggil dari tab lain (misal tombol "Absen Sekarang" di Beranda)
   void gantiTab(int index) {
@@ -22,10 +47,29 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isAdmin == null) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    if (_isAdmin!) {
+      final pages = [const AdminDashboardPage(), const ProfilTab()];
+      return Scaffold(
+        body: SafeArea(
+          bottom: false,
+          child: IndexedStack(index: _selectedIndex, children: pages),
+        ),
+        bottomNavigationBar: GlassBottomNavigation(
+          isAdmin: true,
+          selectedIndex: _selectedIndex,
+          onSelected: gantiTab,
+        ),
+      );
+    }
+
     final pages = [
-      BerandaTab(onAbsenTap: () => gantiTab(1)),
-      const AbsenTab(),
-      const RiwayatTab(),
+      BerandaTab(onAbsenTap: () => gantiTab(1), isActive: _selectedIndex == 0),
+      AbsenTab(isActive: _selectedIndex == 1),
+      RiwayatTab(isActive: _selectedIndex == 2),
       const ProfilTab(),
     ];
 
@@ -34,82 +78,11 @@ class _MainShellState extends State<MainShell> {
         bottom: false,
         child: IndexedStack(index: _selectedIndex, children: pages),
       ),
-      bottomNavigationBar: _buildBottomNav(),
-    );
-  }
-
-  Widget _buildBottomNav() {
-    final items = [
-      (_NavItem(icon: Icons.home_outlined, activeIcon: Icons.home, label: 'Beranda')),
-      (_NavItem(icon: Icons.fingerprint, activeIcon: Icons.fingerprint, label: 'Absen')),
-      (_NavItem(icon: Icons.history, activeIcon: Icons.history, label: 'Riwayat')),
-      (_NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profil')),
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surfaceContainerLowest,
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(16),
-          topRight: Radius.circular(16),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withOpacity(0.05),
-            blurRadius: 12,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          height: 76,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: List.generate(items.length, (index) {
-              final item = items[index];
-              final selected = index == _selectedIndex;
-              return GestureDetector(
-                onTap: () => gantiTab(index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: selected ? AppColors.primary.withOpacity(0.08) : Colors.transparent,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        selected ? item.activeIcon : item.icon,
-                        color: selected ? AppColors.primary : AppColors.secondary,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        item.label,
-                        style: AppText.labelMd.copyWith(
-                          color: selected ? AppColors.primary : AppColors.secondary,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            }),
-          ),
-        ),
+      bottomNavigationBar: GlassBottomNavigation(
+        isAdmin: false,
+        selectedIndex: _selectedIndex,
+        onSelected: gantiTab,
       ),
     );
   }
-}
-
-class _NavItem {
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  _NavItem({required this.icon, required this.activeIcon, required this.label});
 }

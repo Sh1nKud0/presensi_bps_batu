@@ -1,21 +1,35 @@
+import '../widgets/evidence_image.dart';
+import 'pembatalan_pulang_page.dart';
+
 import 'dart:io';
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../theme/app_theme.dart';
+
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:file_saver/file_saver.dart';
+
 import '../services/rekap_presensi.dart';
-import '../services/rekap_excel.dart';
 import '../main.dart';
+import '../services/admin_daily_attendance.dart';
+import '../widgets/request_notifications_button.dart';
+import '../widgets/admin_daily_attendance_list.dart';
+import '../widgets/admin_request_history_tab.dart';
 
 class AdminDashboardPage extends StatefulWidget {
-  const AdminDashboardPage({super.key});
+  final int initialTab;
+  const AdminDashboardPage({super.key, this.initialTab = 0})
+    : assert(initialTab >= 0 && initialTab < 7);
 
   @override
   State<AdminDashboardPage> createState() => _AdminDashboardPageState();
 }
 
 class _AdminDashboardPageState extends State<AdminDashboardPage>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late TabController _tabController;
 
   bool _loadingHariIni = true;
@@ -23,7 +37,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   bool _loadingIzin = true;
   bool _loadingLibur = true;
   List<Map<String, dynamic>> _semuaPeserta = [];
-  Map<String, Map<String, dynamic>> _absensiHariIniMap = {};
+  Map<String, AdminDailyStatus> _statusHariIni = {};
+  Timer? _refreshTimer;
+  bool _refreshingToday = false;
+  String _dayHariIni = '';
+  Future<AdminDailyOverview>? _todayLoad;
+  int _unreadNotifications = 0;
+  int _historyRevision = 0;
   List<Map<String, dynamic>> _rekapSemua = [];
   int _bulanRekap = DateTime.now().month;
   int _tahunRekap = DateTime.now().year;
@@ -38,7 +58,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 5, vsync: this);
+    WidgetsBinding.instance.addObserver(this);
+    _startRefreshTimer();
+    _tabController = TabController(
+      length: 7,
+      vsync: this,
+      initialIndex: widget.initialTab,
+    );
     _tabController.addListener(_saatTabBerubah);
     _ambilDataHariIni();
     _ambilRekapSemua();
@@ -49,9 +75,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _tabController.removeListener(_saatTabBerubah);
     _tabController.dispose();
     super.dispose();
+  }
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _ambilDataHariIni(silent: true);
+      _ambilIzinMenunggu(silent: true);
+      _ambilSusulanMenunggu(silent: true);
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _ambilDataHariIni(silent: true);
+      _ambilIzinMenunggu(silent: true);
+      _ambilSusulanMenunggu(silent: true);
+      _startRefreshTimer();
+    } else {
+      _refreshTimer?.cancel();
+    }
   }
 
   void _saatTabBerubah() {
@@ -59,40 +108,32 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     if (index == _tabIndexTerakhir) return;
     _tabIndexTerakhir = index;
     if (index == 4) _ambilHariLibur();
+    if (index == 0) _ambilDataHariIni(silent: true);
+    if (index == 6) setState(() => _historyRevision++);
   }
 
-  Future<void> _ambilDataHariIni() async {
-    setState(() => _loadingHariIni = true);
+  Future<void> _ambilDataHariIni({bool silent = false}) async {
+    if (_refreshingToday) return;
+    _refreshingToday = true;
+    if (!silent) setState(() => _loadingHariIni = true);
     try {
-      final today = DateTime.now().toIso8601String().substring(0, 10);
-
-      final peserta = await supabase
-          .from('profiles')
-          .select()
-          .eq('role', 'peserta')
-          .order('nama_lengkap');
-
-      final absensiHariIni = await supabase
-          .from('absensi')
-          .select()
-          .eq('tanggal', today);
-
-      final map = <String, Map<String, dynamic>>{};
-      for (final a in absensiHariIni) {
-        map[a['user_id'] as String] = a;
-      }
-
+      _todayLoad = AdminDailyAttendanceRepository().load();
+      final overview = await _todayLoad!;
+      if (!mounted) return;
       setState(() {
-        _semuaPeserta = List<Map<String, dynamic>>.from(peserta);
-        _absensiHariIniMap = map;
+        _semuaPeserta = overview.participants;
+        _statusHariIni = overview.statuses;
+        _dayHariIni = overview.day;
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memuat data hari ini: $e')),
         );
       }
     } finally {
+      _refreshingToday = false;
+      _todayLoad = null;
       if (mounted) setState(() => _loadingHariIni = false);
     }
   }
@@ -109,16 +150,54 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         0,
       ).toIso8601String().substring(0, 10);
 
-      // Join absensi dengan profiles untuk ambil nama peserta
-      final response = await supabase
-          .from('absensi')
-          .select('*, profiles(nama_lengkap)')
-          .gte('tanggal', awal)
-          .lte('tanggal', akhir)
-          .order('tanggal', ascending: false);
+      // Gabungkan presensi dan izin/sakit disetujui pada bulan terpilih.
+      final response = appData.decorate(
+        await appData.api.all(
+          '/api/admin/attendance',
+          'attendance',
+          query: {'from': awal, 'to': akhir},
+        ),
+      );
+      final izinResponse = await appData.requests(
+        'izin',
+        admin: true,
+        status: 'disetujui',
+      );
 
       if (!mounted || bulan != _bulanRekap || tahun != _tahunRekap) return;
-      setState(() => _rekapSemua = List<Map<String, dynamic>>.from(response));
+      final rekap = List<Map<String, dynamic>>.from(response);
+      final tanggalDenganAbsensi = rekap
+          .map((item) => '${item['user_id']}/${item['tanggal']}')
+          .toSet();
+      final awalBulan = DateTime.utc(tahun, bulan, 1);
+      final akhirBulan = DateTime.utc(tahun, bulan + 1, 0);
+
+      for (final item in izinResponse) {
+        final mulai = DateTime.parse('${item['tanggal_mulai']}T00:00:00Z');
+        final selesai = DateTime.parse('${item['tanggal_selesai']}T00:00:00Z');
+        if (mulai.isAfter(akhirBulan) || selesai.isBefore(awalBulan)) continue;
+        for (
+          var tanggal = mulai.isBefore(awalBulan) ? awalBulan : mulai;
+          !tanggal.isAfter(selesai) && !tanggal.isAfter(akhirBulan);
+          tanggal = tanggal.add(const Duration(days: 1))
+        ) {
+          final tanggalString = tanggal.toIso8601String().substring(0, 10);
+          final key = '${item['user_id']}/$tanggalString';
+          // Presensi asli tetap menjadi sumber status utama.
+          if (tanggalDenganAbsensi.contains(key)) continue;
+          rekap.add({
+            'user_id': item['user_id'],
+            'tanggal': tanggalString,
+            'status': item['jenis'] == 'sakit' ? 'sakit' : 'izin',
+            'jam_masuk': null,
+            'jam_pulang': null,
+            'profiles': item['profiles'],
+          });
+          tanggalDenganAbsensi.add(key);
+        }
+      }
+      rekap.sort((a, b) => '${b['tanggal']}'.compareTo('${a['tanggal']}'));
+      setState(() => _rekapSemua = rekap);
     } catch (e) {
       if (mounted && bulan == _bulanRekap && tahun == _tahunRekap) {
         ScaffoldMessenger.of(context)
@@ -131,18 +210,22 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     }
   }
 
-  Future<void> _ambilIzinMenunggu() async {
-    setState(() => _loadingIzin = true);
+  Future<void> _ambilIzinMenunggu({bool silent = false}) async {
+    if (!silent) setState(() => _loadingIzin = true);
     try {
-      final response = await supabase
-          .from('izin')
-          .select('*, profiles!izin_user_id_fkey(nama_lengkap)')
-          .eq('status_persetujuan', 'menunggu')
-          .order('created_at', ascending: false);
+      final response = await appData.requests(
+        'izin',
+        admin: true,
+        status: 'menunggu',
+      );
 
-      setState(() => _izinMenunggu = List<Map<String, dynamic>>.from(response));
-    } catch (e) {
       if (mounted) {
+        setState(
+          () => _izinMenunggu = List<Map<String, dynamic>>.from(response),
+        );
+      }
+    } catch (e) {
+      if (mounted && !silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memuat pengajuan izin: $e')),
         );
@@ -154,42 +237,28 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   Future<void> _prosesIzin(String izinId, bool disetujui) async {
     try {
-      await supabase.from('izin').update({
-        'status_persetujuan': disetujui ? 'disetujui' : 'ditolak',
-        'disetujui_oleh': supabase.auth.currentUser!.id,
-      }).eq('id', izinId);
-
-      await _ambilIzinMenunggu();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(disetujui ? 'Izin disetujui' : 'Izin ditolak'),
-          backgroundColor: disetujui ? Colors.green : Colors.red,
-        ),
-      );
+      if (!await _apiDecision('izin', izinId, disetujui)) return;
+      if (mounted) await _ambilIzinMenunggu();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal memproses izin: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gagal memproses izin: $e')));
     }
   }
 
   Future<void> _ambilHariLibur() async {
     setState(() => _loadingLibur = true);
     try {
-      final response = await supabase
-          .from('hari_libur')
-          .select()
-          .order('tanggal');
+      final response = await appData.holidays();
 
-      setState(() => _daftarHariLibur = List<Map<String, dynamic>>.from(response));
+      setState(
+        () => _daftarHariLibur = List<Map<String, dynamic>>.from(response),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal memuat hari libur: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Gagal memuat hari libur: $e')));
       }
     } finally {
       if (mounted) setState(() => _loadingLibur = false);
@@ -198,33 +267,33 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
 
   Future<void> _tambahHariLibur(DateTime tanggal, String keterangan) async {
     try {
-      await supabase.from('hari_libur').insert({
-        'tanggal': tanggal.toIso8601String().substring(0, 10),
-        'keterangan': keterangan,
-        'dibuat_oleh': supabase.auth.currentUser!.id,
-      });
+      await appData.addHoliday(
+        tanggal.toIso8601String().substring(0, 10),
+        keterangan,
+      );
       await _ambilHariLibur();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Hari libur ditambahkan'), backgroundColor: Colors.green),
+        const SnackBar(
+          content: Text('Hari libur ditambahkan'),
+          backgroundColor: AppColors.tertiaryContainer,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menambah: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gagal menambah: $e')));
     }
   }
 
   Future<void> _hapusHariLibur(String id) async {
     try {
-      await supabase.from('hari_libur').delete().eq('id', id);
+      await appData.removeHoliday(id);
       await _ambilHariLibur();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menghapus: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gagal menghapus: $e')));
     }
   }
 
@@ -252,10 +321,14 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                   final picked = await showDatePicker(
                     context: context,
                     initialDate: DateTime.now(),
-                    firstDate: DateTime.now().subtract(const Duration(days: 30)),
+                    firstDate: DateTime.now().subtract(
+                      const Duration(days: 30),
+                    ),
                     lastDate: DateTime.now().add(const Duration(days: 365)),
                   );
-                  if (picked != null) setDialogState(() => tanggalDipilih = picked);
+                  if (picked != null) {
+                    setDialogState(() => tanggalDipilih = picked);
+                  }
                 },
               ),
               const SizedBox(height: 12),
@@ -270,12 +343,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
             ElevatedButton(
               onPressed: () {
-                if (tanggalDipilih != null && keteranganController.text.isNotEmpty) {
+                if (tanggalDipilih != null &&
+                    keteranganController.text.isNotEmpty) {
                   Navigator.pop(context);
-                  _tambahHariLibur(tanggalDipilih!, keteranganController.text.trim());
+                  _tambahHariLibur(
+                    tanggalDipilih!,
+                    keteranganController.text.trim(),
+                  );
                 }
               },
               child: const Text('Simpan'),
@@ -286,101 +366,100 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     );
   }
 
-  Future<void> _ambilSusulanMenunggu() async {
-    setState(() => _loadingSusulan = true);
+  Future<void> _ambilSusulanMenunggu({bool silent = false}) async {
+    if (!silent) setState(() => _loadingSusulan = true);
     try {
-      final response = await supabase
-          .from('absen_susulan')
-          .select('*, profiles!absen_susulan_user_id_fkey(nama_lengkap)')
-          .eq('status_persetujuan', 'menunggu')
-          .order('created_at', ascending: false);
-      setState(() => _susulanMenunggu = List<Map<String, dynamic>>.from(response));
-    } catch (e) {
+      final response = await appData.requests(
+        'susulan',
+        admin: true,
+        status: 'menunggu',
+      );
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memuat absen susulan: $e')));
+        setState(
+          () => _susulanMenunggu = List<Map<String, dynamic>>.from(response),
+        );
+      }
+    } catch (e) {
+      if (mounted && !silent) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Gagal memuat absen susulan: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _loadingSusulan = false);
     }
   }
 
-  // Konversi tanggal + jam (string "HH:mm:ss") jadi DateTime UTC, mengikuti
-  // konvensi aplikasi: waktu presensi selalu disimpan dalam UTC.
-  DateTime _gabungTanggalJam(String tanggal, String jam) {
-    final t = DateTime.parse(tanggal);
-    final parts = jam.split(':');
-    final local = DateTime(t.year, t.month, t.day, int.parse(parts[0]), int.parse(parts[1]));
-    return local.toUtc();
-  }
-
   Future<void> _prosesSusulan(Map<String, dynamic> item, bool disetujui) async {
     try {
-      if (disetujui) {
-        final userId = item['user_id'] as String;
-        final tanggal = item['tanggal'].toString();
-        final jamMasukStr = item['jam_masuk_diajukan'] as String?;
-        final jamPulangStr = item['jam_pulang_diajukan'] as String?;
-        final jenisAlasan = item['jenis_alasan'] as String;
-
-        DateTime? jamMasukUtc = jamMasukStr != null ? _gabungTanggalJam(tanggal, jamMasukStr) : null;
-        DateTime? jamPulangUtc = jamPulangStr != null ? _gabungTanggalJam(tanggal, jamPulangStr) : null;
-
-        // Tentukan status: dinas luar override status apapun, selain itu
-        // hitung terlambat/hadir dari jam masuk yang diajukan (cutoff 07:30 lokal)
-        String? statusBaru;
-        if (jamMasukUtc != null) {
-          if (jenisAlasan == 'dispensasi') {
-            statusBaru = 'dispensasi';
-          } else {
-            final localMasuk = jamMasukUtc.toLocal();
-            final cutoff = DateTime(localMasuk.year, localMasuk.month, localMasuk.day, 7, 30);
-            statusBaru = localMasuk.isAfter(cutoff) ? 'terlambat' : 'hadir';
-          }
-        }
-
-        // Cek apakah sudah ada baris absensi hari itu (misal presensi GPS normal sudah tercatat)
-        final existing = await supabase
-            .from('absensi')
-            .select()
-            .eq('user_id', userId)
-            .eq('tanggal', tanggal)
-            .maybeSingle();
-
-        if (existing == null) {
-          await supabase.from('absensi').insert({
-            'user_id': userId,
-            'tanggal': tanggal,
-            if (jamMasukUtc != null) 'jam_masuk': jamMasukUtc.toIso8601String(),
-            if (jamPulangUtc != null) 'jam_pulang': jamPulangUtc.toIso8601String(),
-            'status': statusBaru ?? 'hadir',
-          });
-        } else {
-          await supabase.from('absensi').update({
-            if (jamMasukUtc != null) 'jam_masuk': jamMasukUtc.toIso8601String(),
-            if (jamPulangUtc != null) 'jam_pulang': jamPulangUtc.toIso8601String(),
-            if (statusBaru != null) 'status': statusBaru,
-          }).eq('id', existing['id']);
-        }
+      if (!await _apiDecision('susulan', item['id'] as String, disetujui)) {
+        return;
       }
-
-      await supabase.from('absen_susulan').update({
-        'status_persetujuan': disetujui ? 'disetujui' : 'ditolak',
-        'disetujui_oleh': supabase.auth.currentUser!.id,
-      }).eq('id', item['id']);
-
-      await _ambilSusulanMenunggu();
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(disetujui ? 'Absen susulan disetujui & data presensi diperbarui' : 'Absen susulan ditolak'),
-          backgroundColor: disetujui ? Colors.green : Colors.red,
-        ),
-      );
+      if (mounted) await _ambilSusulanMenunggu();
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal memproses: $e')));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Gagal memproses: $e')));
     }
+  }
+
+  Future<bool> _apiDecision(String kind, String id, bool approve) async {
+    String? reason;
+    if (!approve) {
+      final controller = TextEditingController();
+      reason = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Alasan penolakan'),
+          content: TextField(
+            controller: controller,
+            maxLength: 1000,
+            maxLines: 3,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            TextButton(
+              onPressed: () {
+                if (controller.text.trim().isNotEmpty) {
+                  Navigator.pop(context, controller.text.trim());
+                }
+              },
+              child: const Text('Tolak'),
+            ),
+          ],
+        ),
+      );
+      // Dialog closing animation may still use its controller.
+      if (reason == null) return false;
+    }
+    await appData.decide(kind, id, approve, reason: reason);
+    if (!mounted) return true;
+    if (_todayLoad != null) {
+      try {
+        await _todayLoad;
+      } catch (_) {
+        /* Pembacaan berikutnya akan mencoba kembali. */
+      }
+    }
+    if (!mounted) return true;
+    await _ambilDataHariIni(silent: true);
+    if (!mounted) return true;
+    await _ambilRekapSemua();
+    if (mounted) setState(() => _historyRevision++);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            approve ? 'Pengajuan disetujui.' : 'Pengajuan ditolak.',
+          ),
+        ),
+      );
+    }
+    return true;
   }
 
   void _lihatGambarPenuh(BuildContext context, String url) {
@@ -395,12 +474,15 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: InteractiveViewer(
-                child: Image.network(url, fit: BoxFit.contain),
+                child: EvidenceImage(url, fit: BoxFit.contain),
               ),
             ),
             Container(
               margin: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(color: Colors.black54, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+              ),
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
                 onPressed: () => Navigator.pop(context),
@@ -422,6 +504,19 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     return Scaffold(
       appBar: AppBar(
         title: const Text('Dashboard Admin'),
+        actions: [
+          if (appData.userId != null)
+            RequestNotificationsButton(
+              userId: appData.userId!,
+              isAdmin: true,
+              notifySystem: true,
+              onUnreadChanged: (count) {
+                if (mounted && count != _unreadNotifications) {
+                  setState(() => _unreadNotifications = count);
+                }
+              },
+            ),
+        ],
         bottom: TabBar(
           controller: _tabController,
           isScrollable: true,
@@ -432,17 +527,37 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
             Tab(text: 'Approval Izin'),
             Tab(text: 'Approval Susulan'),
             Tab(text: 'Hari Libur'),
+            Tab(text: 'Pembatalan Pulang'),
+            Tab(text: 'Riwayat Pengajuan'),
           ],
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
+      body: Column(
         children: [
-          _buildTabHariIni(),
-          _buildTabRekap(),
-          _buildTabIzin(),
-          _buildTabSusulan(),
-          _buildTabHariLibur(),
+          if (_unreadNotifications > 0)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              color: context.appColors.izinBg,
+              child: Text(
+                '$_unreadNotifications notifikasi pengajuan belum dibaca. Ketuk lonceng untuk melihat permintaan.',
+                style: TextStyle(color: context.appColors.izinText),
+              ),
+            ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                _buildTabHariIni(),
+                _buildTabRekap(),
+                _buildTabIzin(),
+                _buildTabSusulan(),
+                _buildTabHariLibur(),
+                const PembatalanPulangContent(isAdmin: true),
+                AdminRequestHistoryTab(revision: _historyRevision),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -453,114 +568,41 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       return const Center(child: CircularProgressIndicator());
     }
 
-    return RefreshIndicator(
+    return AdminDailyAttendanceList(
+      participants: _semuaPeserta,
+      statuses: _statusHariIni,
+      day: _dayHariIni,
       onRefresh: _ambilDataHariIni,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _semuaPeserta.length,
-        itemBuilder: (context, index) {
-          final peserta = _semuaPeserta[index];
-          final absensi = _absensiHariIniMap[peserta['id']];
-          final sudahAbsen = absensi != null;
-
-          return Card(
-            margin: const EdgeInsets.only(bottom: 8),
-            child: ListTile(
-              leading: CircleAvatar(
-                backgroundColor: sudahAbsen ? Colors.green.shade100 : Colors.red.shade100,
-                child: Icon(
-                  sudahAbsen ? Icons.check : Icons.close,
-                  color: sudahAbsen ? Colors.green : Colors.red,
-                ),
-              ),
-              title: Text(peserta['nama_lengkap'] ?? '-'),
-              subtitle: Text(
-                sudahAbsen
-                    ? 'Masuk: ${_formatJam(absensi['jam_masuk'])}  |  Pulang: ${_formatJam(absensi['jam_pulang'])}'
-                    : 'Belum absen hari ini',
-              ),
-            ),
-          );
-        },
-      ),
     );
   }
 
   String _namaBulan(int b) => const [
-        '', 'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember',
-      ][b];
-
-  // Pagination prevents a large monthly export from being silently truncated.
-  Future<List<Map<String, dynamic>>> _ambilSemuaHalaman(
-    Future<List<Map<String, dynamic>>> Function(int, int) ambil,
-  ) async {
-    const ukuran = 500;
-    final hasil = <Map<String, dynamic>>[];
-    while (true) {
-      final halaman = await ambil(hasil.length, hasil.length + ukuran - 1);
-      hasil.addAll(halaman);
-      if (halaman.isEmpty) return hasil;
-    }
-  }
+    '',
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ][b];
 
   Future<void> _unduhRekapXlsx() async {
     if (_sedangExport) return;
     final bulan = _bulanRekap;
     final tahun = _tahunRekap;
-    final sekarang = DateTime.now();
     setState(() => _sedangExport = true);
     try {
-      final awal = tanggalRekap(DateTime.utc(tahun, bulan, 1));
-      final akhir = tanggalRekap(DateTime.utc(tahun, bulan + 1, 0));
-      final data = await Future.wait([
-        _ambilSemuaHalaman(
-          (dari, sampai) async => await supabase
-              .from('profiles')
-              .select()
-              .eq('role', 'peserta')
-              .order('id')
-              .range(dari, sampai),
-        ),
-        _ambilSemuaHalaman(
-          (dari, sampai) async => await supabase
-              .from('absensi')
-              .select()
-              .gte('tanggal', awal)
-              .lte('tanggal', akhir)
-              .order('id')
-              .range(dari, sampai),
-        ),
-        _ambilSemuaHalaman(
-          (dari, sampai) async => await supabase
-              .from('izin')
-              .select()
-              .eq('status_persetujuan', 'disetujui')
-              .lte('tanggal_mulai', akhir)
-              .gte('tanggal_selesai', awal)
-              .order('id')
-              .range(dari, sampai),
-        ),
-        _ambilSemuaHalaman(
-          (dari, sampai) async => await supabase
-              .from('hari_libur')
-              .select()
-              .gte('tanggal', awal)
-              .lte('tanggal', akhir)
-              .order('id')
-              .range(dari, sampai),
-        ),
-      ]);
-      final rekap = RekapPresensi.hitung(
-        bulan: bulan,
-        tahun: tahun,
-        profiles: data[0],
-        absensi: data[1],
-        izin: data[2],
-        libur: data[3],
-        sekarang: sekarang,
-      );
-      final bytes = buatExcelRekap(rekap);
+      final bytes = (await appData.api.request(
+        'GET',
+        '/api/admin/rekap.xlsx',
+        query: {'month': '$bulan', 'year': '$tahun'},
+      )).bodyBytes;
       final namaFile = 'rekap_presensi_${_namaBulan(bulan)}_$tahun';
 
       try {
@@ -575,7 +617,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
               content: Text('File Excel berhasil disimpan'),
-              backgroundColor: Colors.green,
+              backgroundColor: AppColors.tertiaryContainer,
             ),
           );
         }
@@ -605,7 +647,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
           padding: const EdgeInsets.all(12),
           margin: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.grey.shade100,
+            color: context.appColors.surfaceContainerLow,
             borderRadius: BorderRadius.circular(12),
           ),
           child: Column(
@@ -614,32 +656,61 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      isDense: false,
+                      itemHeight: null,
                       initialValue: _bulanRekap,
-                      decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Bulan'),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        labelText: 'Bulan',
+                      ),
                       items: List.generate(12, (i) => i + 1)
-                          .map((b) => DropdownMenuItem(value: b, child: Text(_namaBulan(b))))
+                          .map(
+                            (b) => DropdownMenuItem(
+                              value: b,
+                              child: Text(_namaBulan(b)),
+                            ),
+                          )
                           .toList(),
-                      onChanged: _sedangExport ? null : (v) {
-                        setState(() => _bulanRekap = v!);
-                        _ambilRekapSemua();
-                      },
+                      onChanged: _sedangExport
+                          ? null
+                          : (v) {
+                              setState(() => _bulanRekap = v!);
+                              _ambilRekapSemua();
+                            },
                     ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: DropdownButtonFormField<int>(
+                      isExpanded: true,
+                      isDense: false,
+                      itemHeight: null,
                       initialValue: _tahunRekap,
-                      decoration: const InputDecoration(isDense: true, border: InputBorder.none, labelText: 'Tahun'),
-                      items: List.generate(
-                        DateTime.now().year - 2024 + 2, // 2024 s/d (tahun sekarang + 1), otomatis nambah tiap tahun
-                        (i) => 2024 + i,
-                      )
-                          .map((t) => DropdownMenuItem(value: t, child: Text('$t')))
-                          .toList(),
-                      onChanged: _sedangExport ? null : (v) {
-                        setState(() => _tahunRekap = v!);
-                        _ambilRekapSemua();
-                      },
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        labelText: 'Tahun',
+                      ),
+                      items:
+                          List.generate(
+                                DateTime.now().year - 2024 + 2, // 2024 s/d (tahun sekarang + 1), otomatis nambah tiap tahun
+                                (i) => 2024 + i,
+                              )
+                              .map(
+                                (t) => DropdownMenuItem(
+                                  value: t,
+                                  child: Text('$t'),
+                                ),
+                              )
+                              .toList(),
+                      onChanged: _sedangExport
+                          ? null
+                          : (v) {
+                              setState(() => _tahunRekap = v!);
+                              _ambilRekapSemua();
+                            },
                     ),
                   ),
                 ],
@@ -673,21 +744,21 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     label = statusPresensi(item).toUpperCase();
     switch (label) {
       case 'DISPENSASI':
-        bg = const Color(0xFFCFFAFE);
-        text = const Color(0xFF0891B2);
+        bg = context.appColors.dispensasiBg;
+        text = context.appColors.dispensasiText;
       case 'TERLAMBAT':
-        bg = const Color(0xFFFCEFD8);
-        text = const Color(0xFFB06000);
+        bg = context.appColors.izinBg;
+        text = context.appColors.izinText;
       case 'HADIR':
-        bg = const Color(0xFFE6F4EA);
-        text = const Color(0xFF137333);
+        bg = context.appColors.hadirBg;
+        text = context.appColors.hadirText;
       case 'IZIN':
       case 'SAKIT':
-        bg = const Color(0xFFE4DFEC);
-        text = const Color(0xFF674EA7);
+        bg = context.appColors.sakitBg;
+        text = context.appColors.sakitText;
       default:
-        bg = Colors.grey.shade200;
-        text = Colors.grey.shade700;
+        bg = context.appColors.surfaceContainerHigh;
+        text = context.appColors.onSurfaceVariant;
     }
 
     return Container(
@@ -723,14 +794,17 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         itemCount: _rekapSemua.length,
         itemBuilder: (context, index) {
           final item = _rekapSemua[index];
-          final namaPeserta = item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
+          final namaPeserta =
+              item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 8),
             child: ListTile(
               title: Text(namaPeserta),
               subtitle: Text(
-                '${item['tanggal']}  |  Masuk: ${_formatJam(item['jam_masuk'])}  |  Pulang: ${_formatJam(item['jam_pulang'])}',
+                item['status'] == 'izin' || item['status'] == 'sakit'
+                    ? '${item['tanggal']}  |  ${statusPresensi(item)}'
+                    : '${item['tanggal']}  |  Masuk: ${_formatJam(item['jam_masuk'])}  |  Pulang: ${_formatJam(item['jam_pulang'])}',
               ),
               trailing: _badgeStatusRekap(item),
             ),
@@ -746,7 +820,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
     }
 
     if (_izinMenunggu.isEmpty) {
-      return const Center(child: Text('Tidak ada pengajuan izin yang menunggu'));
+      return const Center(
+        child: Text('Tidak ada pengajuan izin yang menunggu'),
+      );
     }
 
     return RefreshIndicator(
@@ -756,7 +832,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         itemCount: _izinMenunggu.length,
         itemBuilder: (context, index) {
           final item = _izinMenunggu[index];
-          final namaPeserta = item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
+          final namaPeserta =
+              item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
 
           return Card(
             margin: const EdgeInsets.only(bottom: 12),
@@ -765,35 +842,29 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(namaPeserta, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    namaPeserta,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
-                  Text('${(item['jenis'] as String).toUpperCase()} — ${item['tanggal_mulai']} s/d ${item['tanggal_selesai']}'),
+                  Text(
+                    '${(item['jenis'] as String).toUpperCase()} — ${item['tanggal_mulai']} s/d ${item['tanggal_selesai']}',
+                  ),
                   const SizedBox(height: 4),
-                  Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
+                  Text(
+                    item['keterangan'] ?? '-',
+                    style: TextStyle(color: context.appColors.onSurfaceVariant),
+                  ),
                   if (item['bukti_url'] != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => _lihatGambarPenuh(context, item['bukti_url']),
+                      onTap: () =>
+                          _lihatGambarPenuh(context, item['bukti_url']),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(
-                          item['bukti_url'],
+                        child: EvidenceImage(
+                          item['bukti_url'] as String,
                           height: 140,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              height: 140,
-                              color: Colors.grey.shade200,
-                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            height: 140,
-                            color: Colors.grey.shade200,
-                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
-                          ),
                         ),
                       ),
                     ),
@@ -804,7 +875,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _prosesIzin(item['id'], false),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: context.appColors.error,
+                          ),
                           child: const Text('Tolak'),
                         ),
                       ),
@@ -812,7 +885,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () => _prosesIzin(item['id'], true),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.tertiaryContainer,
+                            foregroundColor: Colors.white,
+                          ),
                           child: const Text('Setujui'),
                         ),
                       ),
@@ -851,20 +927,49 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       itemCount: _daftarHariLibur.length,
                       itemBuilder: (context, index) {
                         final item = _daftarHariLibur[index];
-                        final tanggal = DateTime.parse(item['tanggal'].toString());
-                        const namaHari = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
-                        const namaBulan = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                        final tanggal = DateTime.parse(
+                          item['tanggal'].toString(),
+                        );
+                        const namaHari = [
+                          'Senin',
+                          'Selasa',
+                          'Rabu',
+                          'Kamis',
+                          'Jumat',
+                          'Sabtu',
+                          'Minggu',
+                        ];
+                        const namaBulan = [
+                          '',
+                          'Jan',
+                          'Feb',
+                          'Mar',
+                          'Apr',
+                          'Mei',
+                          'Jun',
+                          'Jul',
+                          'Agu',
+                          'Sep',
+                          'Okt',
+                          'Nov',
+                          'Des',
+                        ];
 
                         return Card(
                           margin: const EdgeInsets.only(bottom: 8),
                           child: ListTile(
-                            leading: const CircleAvatar(child: Icon(Icons.event_busy)),
+                            leading: const CircleAvatar(
+                              child: Icon(Icons.event_busy),
+                            ),
                             title: Text(item['keterangan'] ?? '-'),
                             subtitle: Text(
                               '${namaHari[tanggal.weekday - 1]}, ${tanggal.day} ${namaBulan[tanggal.month]} ${tanggal.year}',
                             ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Colors.red),
+                              icon: Icon(
+                                Icons.delete_outline,
+                                color: context.appColors.error,
+                              ),
                               onPressed: () => _hapusHariLibur(item['id']),
                             ),
                           ),
@@ -880,7 +985,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
       return const Center(child: CircularProgressIndicator());
     }
     if (_susulanMenunggu.isEmpty) {
-      return const Center(child: Text('Tidak ada pengajuan absen susulan yang menunggu'));
+      return const Center(
+        child: Text('Tidak ada pengajuan absen susulan yang menunggu'),
+      );
     }
 
     return RefreshIndicator(
@@ -890,7 +997,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
         itemCount: _susulanMenunggu.length,
         itemBuilder: (context, index) {
           final item = _susulanMenunggu[index];
-          final namaPeserta = item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
+          final namaPeserta =
+              item['profiles']?['nama_lengkap'] ?? 'Tidak diketahui';
           const labelAlasan = {
             'dispensasi': 'Dispensasi',
             'lupa_absen': 'Lupa Absen',
@@ -905,40 +1013,38 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(namaPeserta, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    namaPeserta,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
-                  Text('${item['tanggal']} • ${labelAlasan[item['jenis_alasan']] ?? '-'}'),
+                  Text(
+                    '${item['tanggal']} • ${labelAlasan[item['jenis_alasan']] ?? '-'}',
+                  ),
                   const SizedBox(height: 4),
                   if (item['jam_masuk_diajukan'] != null)
-                    Text('Jam masuk diajukan: ${item['jam_masuk_diajukan'].toString().substring(0, 5)}'),
+                    Text(
+                      'Jam masuk diajukan: ${item['jam_masuk_diajukan'].toString().substring(0, 5)}',
+                    ),
                   if (item['jam_pulang_diajukan'] != null)
-                    Text('Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}'),
+                    Text(
+                      'Jam pulang diajukan: ${item['jam_pulang_diajukan'].toString().substring(0, 5)}',
+                    ),
                   const SizedBox(height: 4),
-                  Text(item['keterangan'] ?? '-', style: const TextStyle(color: Colors.grey)),
+                  Text(
+                    item['keterangan'] ?? '-',
+                    style: TextStyle(color: context.appColors.onSurfaceVariant),
+                  ),
                   if (item['bukti_url'] != null) ...[
                     const SizedBox(height: 12),
                     GestureDetector(
-                      onTap: () => _lihatGambarPenuh(context, item['bukti_url']),
+                      onTap: () =>
+                          _lihatGambarPenuh(context, item['bukti_url']),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.network(
-                          item['bukti_url'],
+                        child: EvidenceImage(
+                          item['bukti_url'] as String,
                           height: 140,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, progress) {
-                            if (progress == null) return child;
-                            return Container(
-                              height: 140,
-                              color: Colors.grey.shade200,
-                              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                            );
-                          },
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            height: 140,
-                            color: Colors.grey.shade200,
-                            child: const Center(child: Icon(Icons.broken_image_outlined, color: Colors.grey)),
-                          ),
                         ),
                       ),
                     ),
@@ -949,7 +1055,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: OutlinedButton(
                           onPressed: () => _prosesSusulan(item, false),
-                          style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: context.appColors.error,
+                          ),
                           child: const Text('Tolak'),
                         ),
                       ),
@@ -957,7 +1065,10 @@ class _AdminDashboardPageState extends State<AdminDashboardPage>
                       Expanded(
                         child: ElevatedButton(
                           onPressed: () => _prosesSusulan(item, true),
-                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.tertiaryContainer,
+                            foregroundColor: Colors.white,
+                          ),
                           child: const Text('Setujui'),
                         ),
                       ),

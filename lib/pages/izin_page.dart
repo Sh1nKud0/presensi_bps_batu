@@ -1,10 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import '../services/attendance_requests.dart';
+import '../theme/app_theme.dart';
+import '../widgets/evidence_picker.dart';
 import '../main.dart';
 
 class IzinPage extends StatefulWidget {
-  const IzinPage({super.key});
+  final int initialTab;
+  const IzinPage({super.key, this.initialTab = 0}) : assert(initialTab >= 0 && initialTab < 2);
 
   @override
   State<IzinPage> createState() => _IzinPageState();
@@ -16,7 +19,7 @@ class _IzinPageState extends State<IzinPage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 2, vsync: this, initialIndex: widget.initialTab);
   }
 
   @override
@@ -95,14 +98,12 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
   }
 
   Future<void> _pilihBukti() async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
-    if (file != null) {
-      setState(() => _buktiFile = File(file.path));
-    }
+    final file = await pilihBukti(context);
+    if (file != null && mounted) setState(() => _buktiFile = File(file.path));
   }
 
   Future<void> _submit() async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     if (_tanggalMulai == null || _tanggalSelesai == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -120,30 +121,22 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
     setState(() => _isLoading = true);
 
     try {
-      final userId = supabase.auth.currentUser!.id;
-      String? buktiUrl;
-
-      if (_buktiFile != null) {
-        final fileName = '$userId/${DateTime.now().millisecondsSinceEpoch}.jpg';
-        await supabase.storage.from('bukti-izin').upload(fileName, _buktiFile!);
-        buktiUrl = supabase.storage.from('bukti-izin').getPublicUrl(fileName);
-      }
-
-      await supabase.from('izin').insert({
-        'user_id': userId,
-        'tanggal_mulai': _tanggalMulai!.toIso8601String().substring(0, 10),
-        'tanggal_selesai': _tanggalSelesai!.toIso8601String().substring(0, 10),
-        'jenis': _jenis,
-        'keterangan': _keteranganController.text.trim(),
-        'bukti_url': buktiUrl,
-        'status_persetujuan': 'menunggu',
-      });
+      final userId = appData.userId!;
+      final start = _tanggalMulai!.toIso8601String().substring(0, 10);
+      final end = _tanggalSelesai!.toIso8601String().substring(0, 10);
+      final requests = AttendanceRequestsRepository();
+      await requests.ensureCanRequest(userId, start, end);
+      if (!mounted) return;
+      await appData.submitRequest('izin', {
+        'tanggal_mulai': start, 'tanggal_selesai': end,
+        'jenis': _jenis, 'keterangan': _keteranganController.text.trim(),
+      }, _buktiFile);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Text('Pengajuan berhasil dikirim! Menunggu persetujuan admin.'),
-          backgroundColor: Colors.green,
+          backgroundColor: context.appColors.hadirText,
         ),
       );
 
@@ -173,101 +166,103 @@ class _FormAjukanIzinState extends State<_FormAjukanIzin> {
   Widget build(BuildContext context) {
     return Form(
       key: _formKey,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          const Text('Jenis', style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Izin'),
-                  value: 'izin',
-                  groupValue: _jenis,
-                  onChanged: (v) => setState(() => _jenis = v!),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-              Expanded(
-                child: RadioListTile<String>(
-                  title: const Text('Sakit'),
-                  value: 'sakit',
-                  groupValue: _jenis,
-                  onChanged: (v) => setState(() => _jenis = v!),
-                  contentPadding: EdgeInsets.zero,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pilihTanggal(isMulai: true),
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(_formatTanggal(_tanggalMulai)),
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text('s/d'),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () => _pilihTanggal(isMulai: false),
-                  icon: const Icon(Icons.calendar_today, size: 16),
-                  label: Text(_formatTanggal(_tanggalSelesai)),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
-          TextFormField(
-            controller: _keteranganController,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Keterangan',
-              hintText: 'Jelaskan alasan izin/sakit Anda',
-              border: OutlineInputBorder(),
-            ),
-            validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Keterangan tidak boleh kosong';
-              }
-              return null;
-            },
-          ),
-          const SizedBox(height: 16),
-
-          OutlinedButton.icon(
-            onPressed: _pilihBukti,
-            icon: const Icon(Icons.attach_file),
-            label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
-          ),
-          if (_buktiFile != null) ...[
+      child: AbsorbPointer(
+        absorbing: _isLoading,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            const Text('Jenis', style: TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 8),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.file(_buktiFile!, height: 150),
+            Row(
+              children: [
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text('Izin'),
+                    value: 'izin',
+                    groupValue: _jenis,
+                    onChanged: (v) => setState(() => _jenis = v!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+                Expanded(
+                  child: RadioListTile<String>(
+                    title: const Text('Sakit'),
+                    value: 'sakit',
+                    groupValue: _jenis,
+                    onChanged: (v) => setState(() => _jenis = v!),
+                    contentPadding: EdgeInsets.zero,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pilihTanggal(isMulai: true),
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_formatTanggal(_tanggalMulai)),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                const Text('s/d'),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _pilihTanggal(isMulai: false),
+                    icon: const Icon(Icons.calendar_today, size: 16),
+                    label: Text(_formatTanggal(_tanggalSelesai)),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+
+            TextFormField(
+              controller: _keteranganController,
+              maxLines: 3,
+              decoration: const InputDecoration(
+                labelText: 'Keterangan',
+                hintText: 'Jelaskan alasan izin/sakit Anda',
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Keterangan tidak boleh kosong';
+                }
+                return null;
+              },
+            ),
+            const SizedBox(height: 16),
+
+            OutlinedButton.icon(
+              onPressed: _isLoading ? null : _pilihBukti,
+              icon: const Icon(Icons.attach_file),
+              label: Text(_buktiFile == null ? 'Lampirkan Bukti (opsional)' : 'Bukti terlampir ✓'),
+            ),
+            if (_buktiFile != null) ...[
+              const SizedBox(height: 8),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(_buktiFile!, height: 150),
+              ),
+            ],
+            const SizedBox(height: 24),
+
+            ElevatedButton(
+              onPressed: _isLoading ? null : _submit,
+              style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Ajukan'),
             ),
           ],
-          const SizedBox(height: 24),
-
-          ElevatedButton(
-            onPressed: _isLoading ? null : _submit,
-            style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
-            child: _isLoading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Ajukan'),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -296,12 +291,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
   Future<void> _ambilRiwayat() async {
     setState(() => _isLoading = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final response = await supabase
-          .from('izin')
-          .select()
-          .eq('user_id', userId)
-          .order('created_at', ascending: false);
+      final response = await appData.requests('izin');
 
       setState(() => _riwayat = List<Map<String, dynamic>>.from(response));
     } catch (e) {
@@ -314,11 +304,11 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
   Color _warnaStatus(String status) {
     switch (status) {
       case 'disetujui':
-        return Colors.green;
+        return context.appColors.hadirText;
       case 'ditolak':
-        return Colors.red;
+        return context.appColors.error;
       default:
-        return Colors.orange;
+        return context.appColors.izinText;
     }
   }
 
@@ -359,7 +349,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                               decoration: BoxDecoration(
-                                color: _warnaStatus(status).withOpacity(0.15),
+                                color: _warnaStatus(status).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Text(
@@ -378,7 +368,7 @@ class _RiwayatIzinState extends State<_RiwayatIzin> {
                         const SizedBox(height: 4),
                         Text(
                           item['keterangan'] ?? '-',
-                          style: const TextStyle(color: Colors.grey),
+                          style: TextStyle(color: context.appColors.onSurfaceVariant),
                         ),
                       ],
                     ),

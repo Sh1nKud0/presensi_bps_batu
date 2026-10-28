@@ -36,8 +36,7 @@ class _EditProfilPageState extends State<EditProfilPage> {
 
   Future<void> _muatProfil() async {
     try {
-      final userId = supabase.auth.currentUser!.id;
-      final profile = await supabase.from('profiles').select().eq('id', userId).single();
+      final profile = await appData.profile();
 
       _namaController.text = profile['nama_lengkap'] ?? '';
       _noHpController.text = profile['no_hp'] ?? '';
@@ -55,13 +54,12 @@ class _EditProfilPageState extends State<EditProfilPage> {
 
     setState(() => _saving = true);
     try {
-      final userId = supabase.auth.currentUser!.id;
-      await supabase.from('profiles').update({
+      await appData.updateProfile({
         'nama_lengkap': _namaController.text.trim(),
         'no_hp': _noHpController.text.trim(),
         'asal_instansi': _asalInstansiController.text.trim(),
         'nim': _nimController.text.trim(),
-      }).eq('id', userId);
+      });
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -83,8 +81,7 @@ class _EditProfilPageState extends State<EditProfilPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Edit Profil'),
-        backgroundColor: AppColors.background,
-        foregroundColor: AppColors.onSurface,
+        foregroundColor: context.appColors.onSurface,
         elevation: 0,
       ),
       body: _loading
@@ -99,7 +96,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Nama Lengkap',
                       prefixIcon: Icon(Icons.person_outline),
-                      border: OutlineInputBorder(),
                     ),
                     validator: (v) => (v == null || v.isEmpty) ? 'Nama tidak boleh kosong' : null,
                   ),
@@ -109,7 +105,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'NIM / NISN (opsional)',
                       prefixIcon: Icon(Icons.badge_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -118,7 +113,6 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Asal Instansi / Kampus',
                       prefixIcon: Icon(Icons.school_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -128,22 +122,21 @@ class _EditProfilPageState extends State<EditProfilPage> {
                     decoration: const InputDecoration(
                       labelText: 'Nomor HP',
                       prefixIcon: Icon(Icons.phone_outlined),
-                      border: OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 24),
                   ElevatedButton(
                     onPressed: _saving ? null : _simpan,
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
+                      backgroundColor: context.appColors.primary,
+                      foregroundColor: context.appColors.onPrimary,
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                            child: CircularProgressIndicator(strokeWidth: 2, color: context.appColors.onPrimary),
                           )
                         : const Text('Simpan Perubahan'),
                   ),

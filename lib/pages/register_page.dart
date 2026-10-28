@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../main.dart';
+import '../theme/app_theme.dart';
+import '../widgets/google_sign_in_button.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -16,6 +18,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
+  bool _googleLoading = false;
   bool _obscurePassword = true;
 
   @override
@@ -33,35 +36,27 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _isLoading = true);
 
     try {
-      final response = await supabase.auth.signUp(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-        data: {
-          'nama_lengkap': _namaController.text.trim(),
-        },
+      await appData.register(
+        _emailController.text,
+        _passwordController.text,
+        _namaController.text,
       );
 
       if (!mounted) return;
 
-      if (response.user != null) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Registrasi berhasil! Silakan login.'),
-            backgroundColor: Colors.green,
+            backgroundColor: AppColors.tertiaryContainer,
           ),
         );
         Navigator.of(context).pop(); // kembali ke halaman login
       }
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal daftar: ${e.message}')),
-      );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Terjadi kesalahan: $e')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Terjadi kesalahan: $e')));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -83,7 +78,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   decoration: const InputDecoration(
                     labelText: 'Nama Lengkap',
                     prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -100,7 +94,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   decoration: const InputDecoration(
                     labelText: 'Email',
                     prefixIcon: Icon(Icons.email_outlined),
-                    border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -120,7 +113,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   decoration: InputDecoration(
                     labelText: 'Password',
                     prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword
@@ -136,8 +128,8 @@ class _RegisterPageState extends State<RegisterPage> {
                     if (value == null || value.isEmpty) {
                       return 'Password tidak boleh kosong';
                     }
-                    if (value.length < 6) {
-                      return 'Password minimal 6 karakter';
+                    if (value.length < 8) {
+                      return 'Password minimal 8 karakter';
                     }
                     return null;
                   },
@@ -150,7 +142,6 @@ class _RegisterPageState extends State<RegisterPage> {
                   decoration: const InputDecoration(
                     labelText: 'Konfirmasi Password',
                     prefixIcon: Icon(Icons.lock_outline),
-                    border: OutlineInputBorder(),
                   ),
                   validator: (value) {
                     if (value != _passwordController.text) {
@@ -162,7 +153,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 const SizedBox(height: 24),
 
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
+                  onPressed: _isLoading || _googleLoading ? null : _register,
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -173,6 +164,16 @@ class _RegisterPageState extends State<RegisterPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Text('Daftar'),
+                ),
+                const SizedBox(height: 16),
+                GoogleSignInButton(
+                  enabled: !_isLoading,
+                  onBusyChanged: (busy) {
+                    if (mounted) setState(() => _googleLoading = busy);
+                  },
+                  onSignedIn: () {
+                    if (mounted) Navigator.of(context).pop();
+                  },
                 ),
               ],
             ),

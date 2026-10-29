@@ -218,8 +218,8 @@ class _ProfilTabState extends State<ProfilTab> {
                   onTap: () {
                     showAboutDialog(
                       context: context,
-                      applicationName: 'magang presensi bps Batu',
-                      applicationVersion: '1.0.1',
+                      applicationName: 'Presensi Magang BPS Kota Batu',
+                      applicationVersion: '1.0.2',
                     );
                   },
                 ),

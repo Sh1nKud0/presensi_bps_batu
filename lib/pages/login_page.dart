@@ -92,7 +92,7 @@ class _LoginPageState extends State<LoginPage> {
                             ),
                             const SizedBox(height: 16),
                             const Text(
-                              'magang presensi bps Batu',
+                              'Presensi Magang BPS Kota Batu',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 24,

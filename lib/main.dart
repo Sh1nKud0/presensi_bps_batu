@@ -44,7 +44,7 @@ class MyApp extends StatelessWidget {
       valueListenable: appThemeController,
       builder: (context, mode, _) => MaterialApp(
         navigatorKey: appNavigatorKey,
-        title: 'magang presensi bps Batu',
+        title: 'Presensi Magang BPS Kota Batu',
         debugShowCheckedModeBanner: false,
         theme: buildAppTheme(),
         darkTheme: buildAppTheme(brightness: Brightness.dark),

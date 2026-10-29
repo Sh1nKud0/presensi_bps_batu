@@ -8,7 +8,7 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <application
         android:allowBackup="false"
-        android:label="magang presensi bps Batu"
+        android:label="Presensi Magang BPS Kota Batu"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

@@ -140,7 +140,7 @@ class _BerandaTabState extends State<BerandaTab> with WidgetsBindingObserver {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'magang presensi bps Batu',
+                  'Presensi Magang BPS Kota Batu',
                   style: AppText.headlineMdMobile.copyWith(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
               ),

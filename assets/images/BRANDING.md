@@ -1,8 +1,8 @@
 # Presensi Magang
 
 Logo sementara aplikasi menggunakan pin lokasi biru dan centang hijau mint.
-Nama aplikasi tetap **Presensi Magang**, dengan **BPS Kota Batu** sebagai
-identitas instansi pada splash screen.
+Nama aplikasi adalah **Presensi Magang BPS Kota Batu**, digunakan pada ikon
+launcher, splash screen, login, beranda, dan informasi aplikasi.
 
 Konsep pin/centang mengacu pada simbol presensi dan lokasi, dengan referensi
 [Map Pin Check Inside dari Lucide](https://lucide.dev/icons/map-pin-check-inside).

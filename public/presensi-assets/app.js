@@ -1,9 +1,13 @@
+import { decisionHistory } from './request-history.js?v=20261103';
+import { dashboardSummary } from './dashboard.js?v=20261102';
 import { escapeHtml as e, todayWib, timeWib, dateLabel, datetimeLabel, shiftDay, distanceMeters, dailyStatuses, OFFICE_LOCATION } from './domain.js?v=20261029-gps170-r1';
 import { collectLocation, validateAttendancePoint } from './location.js?v=20261029-gps170-r1';
 
 const $ = selector => document.querySelector(selector);
 const state = { user: null, tab: 'home', authMode: 'login', csrf: $('meta[name="csrf-token"]').content, filters: {}, pages: {}, epoch: 0, busy: false, session: 0 };
 const PAGE_SIZE = 25;
+const navIcons = {"home":"M3 10 12 3l9 7v11h-6v-7H9v7H3Z","attendance":"M8 3H5v18h14V3h-3M9 3h6v4H9ZM8 13l3 3 5-5","history":"M3 12a9 9 0 1 0 3-7M3 3v6h6M12 7v5l3 2","requests":"M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h5","files":"M8 12l6-6a3 3 0 0 1 4 4l-8 8a4 4 0 0 1-6-6l8-8","holidays":"M3 6h18v15H3ZM7 3v6M17 3v6M3 11h18M8 15h2M14 15h2","profile":"M5 21v-2a7 7 0 0 1 14 0v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8","users":"M3 21v-2a6 6 0 0 1 12 0v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M17 4a4 4 0 0 1 0 8M18 15a5 5 0 0 1 3 5","report":"M4 3h16v18H4ZM8 17v-4M12 17V7M16 17v-7"};
+function navIcon(key) { return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="'+(navIcons[key] || navIcons.home)+'"/></svg>'; }
 const localTest = document.body.dataset.localTest === 'true';
 const kinds = { izin: 'Izin / sakit', susulan: 'Absen susulan', pembatalan: 'Pembatalan pulang' };
 const spinner = '<div class="loading-panel"><span class="spinner"></span>Memuat data terbaru…</div>';
@@ -19,6 +23,12 @@ function notify(message, error = false) {
     $('#notice').textContent = message;
     $('#notice').classList.toggle('error', error);
     $('#notice').hidden = !message;
+}
+function setNotificationCount(value) {
+    const count = Number(value);
+    const unread = Number.isFinite(count) && count > 0 ? count : 0;
+    $('#header-notification-dot').hidden = unread === 0;
+    $('#header-notification').setAttribute('aria-label', unread ? `Notifikasi, ${unread} belum dibaca` : 'Notifikasi');
 }
 function synced() { $('#sync-status').textContent = `Diperbarui ${timeWib(new Date())} WIB · ${localTest ? 'Data uji lokal terpisah' : 'Data yang sama dengan aplikasi Android'}`; }
 async function api(method, path, { query, body, bytes, mime, binary = false } = {}) {
@@ -63,11 +73,12 @@ async function all(path, key, query = {}) {
 }
 function showAuth(mode = 'login') {
     state.user = null; state.session++; state.epoch++;
-    state.filters = {}; state.pages = {};
+    state.filters = {}; state.pages = {}; state.selectedRequest = null; seenNotifications.clear(); closeNotifications(); clearProofs();
     delete state.locationPoint;
     $('#workspace').hidden = true; $('#auth').hidden = false; $('#loading').hidden = true;
-    $('#account-menu').open = false; $('#account-menu').hidden = true; $('#header-label').hidden = false;
+    $('#account-menu').open = false; $('#account-menu').hidden = true; $('#header-actions').hidden = true; $('#header-label').hidden = false; setNotificationCount(0);
     document.body.classList.add('auth-screen');
+    document.body.classList.remove('participant-dashboard');
     $('#content').replaceChildren();
     closeModal();
     $('#auth-form').reset();
@@ -101,17 +112,20 @@ function showWorkspace(user) {
     pendingGoogleCredential = null;
     state.user = user; state.session++; state.tab = 'home';
     $('#auth').hidden = true; $('#loading').hidden = true; $('#workspace').hidden = false;
-    $('#header-label').hidden = true; $('#account-menu').hidden = false; $('#account-menu').open = false;
+    $('#header-label').hidden = true; $('#header-actions').hidden = false; $('#account-menu').hidden = false; $('#account-menu').open = false;
     document.body.classList.remove('auth-screen');
+    document.body.classList.toggle('participant-dashboard', user.role !== 'admin');
     $('#greeting').textContent = `Halo, ${user.nama_lengkap}`;
     $('#role-tag').textContent = user.role;
     $('#account-name').textContent = user.nama_lengkap;
-    $('#workspace-subtitle').textContent = user.role === 'admin' ? 'Pantau kehadiran dan kelola pengajuan peserta magang.' : 'Semoga hari magang Anda berjalan menyenangkan.';
+    $('#workspace-subtitle').textContent = user.role === 'admin' ? 'Pantau kehadiran dan kelola pengajuan peserta magang.' : 'Siap untuk mulai berkarya hari ini?';
     const tabs = user.role === 'admin'
-        ? [['home', 'Ringkasan'], ['requests', 'Persetujuan'], ['report', 'Rekap presensi'], ['users', 'Peserta'], ['holidays', 'Hari libur'], ['notifications', 'Notifikasi'], ['profile', 'Profil']]
-        : [['home', 'Hari ini'], ['history', 'Riwayat'], ['requests', 'Pengajuan'], ['notifications', 'Notifikasi'], ['files', 'Bukti'], ['holidays', 'Hari libur'], ['profile', 'Profil']];
-    $('#tabs').innerHTML = tabs.map(([tab, title]) => `<button type="button" data-tab="${tab}">${title}</button>`).join('');
-    return renderTab();
+        ? [['home', 'Ringkasan'], ['requests', 'Persetujuan'], ['report', 'Rekap presensi'], ['users', 'Peserta'], ['holidays', 'Hari libur'], ['profile', 'Profil']]
+        : [['home', 'Beranda'], ['attendance', 'Absen'], ['history', 'Riwayat'], ['requests', 'Pengajuan'], ['holidays', 'Hari libur'], ['profile', 'Profil']];
+    $('#tabs').innerHTML = tabs.map(([tab, title]) => `<button type="button" data-tab="${tab}">${navIcon(tab)}<span>${title}</span></button>`).join('');
+    const rendered = renderTab();
+    pollNotifications().catch(() => {});
+    return rendered;
 }
 
 function googleLibrary() {
@@ -188,18 +202,25 @@ function stat(label, value, note = '') { return `<div class="stat"><small>${e(la
 function filterFor(key, defaults = {}) { return state.filters[key] ??= { ...defaults }; }
 function offset(key) { return (state.pages[key] ?? 0) * PAGE_SIZE; }
 function pager(key, count) { const page = state.pages[key] ?? 0; return `<div class="pager"><span>Halaman ${page + 1} · ${count} catatan</span><div><button class="button subtle" data-page="${key}" data-direction="-1" ${page === 0 ? 'disabled' : ''}>Sebelumnya</button><button class="button subtle" data-page="${key}" data-direction="1" ${count < PAGE_SIZE ? 'disabled' : ''}>Berikutnya</button></div></div>`; }
-function rangeFilter(key, values, extra = '') { return `<form class="filters" data-filter="${key}"><label>Dari tanggal<input type="date" name="from" value="${e(values.from)}" required></label><label>Sampai tanggal<input type="date" name="to" value="${e(values.to)}" required></label>${extra}<button class="button subtle" type="submit">Tampilkan</button></form>`; }
+function rangeFilter(key, values, extra = '') { return `<form class="filters" data-filter="${key}"><label>Dari tanggal<input type="date" name="from" value="${e(values.from)}" required></label><label>Sampai tanggal<input type="date" name="to" value="${e(values.to)}" required></label>${extra}</form>`; }
 async function renderTab({ silent = false } = {}) {
     if (!state.user) return;
     const epoch = ++state.epoch;
     document.querySelectorAll('[data-tab]').forEach(button => { const active = button.dataset.tab === state.tab; button.classList.toggle('active', active); button.setAttribute('aria-current', active ? 'page' : 'false'); });
     if (!silent) $('#content').innerHTML = spinner;
     try {
-        const renderers = { home: state.user.role === 'admin' ? adminHome : participantHome, history: historyPage, requests: requestsPage, report: reportPage, users: usersPage, holidays: holidaysPage, notifications: notificationsPage, files: filesPage, profile: profilePage };
+        const renderers = { home: state.user.role === 'admin' ? adminHome : participantHome, attendance: participantAttendance, history: historyPage, requests: requestsPage, report: reportPage, users: usersPage, holidays: holidaysPage, notifications: notificationsPage, files: filesPage, profile: profilePage };
         const html = await renderers[state.tab]();
         if (epoch !== state.epoch || !state.user) return;
+        const focused = document.activeElement;
+        const searchFocus = focused?.matches('form[data-filter] input[type="text"], form[data-filter] input:not([type])') ? { name: focused.name, start: focused.selectionStart, end: focused.selectionEnd } : null;
+        clearProofs();
         $('#content').innerHTML = html;
-        if (state.tab === 'home' && state.locationPoint) showLocation(state.locationPoint);
+        if (searchFocus) {
+            const input = [...document.querySelectorAll('#content form[data-filter] input')].find(input => input.name === searchFocus.name);
+            if (input) { input.focus(); input.setSelectionRange(searchFocus.start, searchFocus.end); }
+        }
+        if (state.tab === 'attendance' && state.locationPoint) showLocation(state.locationPoint);
         synced();
     } catch (error) {
         if (epoch !== state.epoch || !state.user) return;
@@ -210,10 +231,39 @@ async function renderTab({ silent = false } = {}) {
 }
 
 async function participantHome() {
-    const [today, statistics, notifications] = await Promise.all([api('GET', 'attendance/today'), api('GET', 'me/statistics'), api('GET', 'notifications', { query: { limit: 1 } })]);
+    const [today, notifications] = await Promise.all([
+        api('GET', 'attendance/today'), api('GET', 'notifications', { query: { limit: 1 } }),
+    ]);
+    state.today = today;
+    setNotificationCount(notifications.unread_count);
+    const summary = dashboardSummary(today);
+    const row = summary.attendance;
+    const date = new Date(`${String(today.tanggal).slice(0, 10)}T12:00:00+07:00`);
+    const fullDate = Number.isNaN(date.getTime()) ? dateLabel(today.tanggal) : new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(date);
+    const wibHour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+    const reminder = !row?.jam_masuk && !today.hari_libur && !today.block_reason && wibHour >= 8;
+    const time = value => value ? timeWib(value) : '--:--';
+    return `<div class="mobile-home">
+        <div class="mobile-home-heading"><span>KEHADIRAN HARI INI</span>${badge(row?.status ?? 'belum', row?.status ?? 'Belum presensi')}</div><div class="home-layout"><div class="home-primary">
+        <section class="mobile-status-card" aria-label="Status hari ini"><div class="today-card-top"><span class="today-icon">${navIcon('attendance')}</span><div><h2>Setiap hari, satu langkah maju.</h2><p>Catat kehadiran. Mulai kontribusimu.</p></div></div><p class="mobile-date">${e(fullDate)}</p><div class="mobile-status-grid">
+            <div class="mobile-status-item"><svg class="status-in" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 4h6v16h-6M3 12h12m-4-4 4 4-4 4"/></svg><strong>${e(time(row?.jam_masuk))}</strong><span>Masuk</span></div>
+            <div class="mobile-status-item"><svg class="status-out" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M11 4H5v16h6m10-8H9m4-4-4 4 4 4"/></svg><strong>${e(time(row?.jam_pulang))}</strong><span>Pulang</span></div>
+            <div class="mobile-status-item"><svg class="status-work" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><strong class="work-time">${summary.hours}j ${summary.remainingMinutes}m</strong><span>${summary.complete ? 'Kerja · 8j+' : 'Kerja'}</span></div>
+        </div></section>
+        <button type="button" class="mobile-attendance-button" data-tab="attendance" ${summary.available ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0M7 11a5 5 0 1 1 10 0c0 4-.4 7-2 10M10 20c1-2 1-5 1-9a1 1 0 1 1 2 0c0 4 0 6-.6 9M5 13c0 2 0 4-1 6m15-6c0 2 0 4-.5 6"/></svg>${e(summary.action)}</button>
+        ${today.block_reason ? `<p class="mobile-block-reason">${e(today.block_reason)}</p>` : ''}
+        ${canCancel(row, today.tanggal) ? '<button type="button" class="mobile-cancel" data-new-request="pembatalan">Ajukan Pembatalan Absen Pulang</button>' : ''}
+        ${reminder ? '<div class="mobile-reminder"><strong>Anda belum absen hari ini!</strong><span>Segera lakukan presensi. Jika ada kendala, ajukan Absen Susulan.</span></div>' : ''}
+        ${summary.complete ? '<div class="mobile-target">Target jam kerja hari ini sudah tercapai (8 jam+).</div>' : ''}
+</div><aside class="home-secondary"><section class="day-guide"><span class="eyebrow">RITME HARI KERJA</span><h2>Hari yang terencana.</h2><p>Jangan lewatkan waktu presensi Anda.</p><div class="schedule-row"><span class="schedule-dot"></span><div><strong>07:30 <small>WIB</small></strong><span>Batas masuk tepat waktu</span></div></div><div class="schedule-row"><span class="schedule-dot blue"></span><div><strong>16:00 <small>WIB</small></strong><span>Waktu pulang kantor</span></div></div><div class="guide-foot">${navIcon('attendance')}<span>Periksa lokasi sebelum mencatat kehadiran.</span></div></section><button class="history-shortcut" data-tab="history">${navIcon('history')}<span><strong>Perjalanan magangmu</strong><small>Lihat riwayat kehadiran</small></span><span aria-hidden="true">→</span></button></aside></div><section class="quick-section"><div class="section-heading"><div><h2>Ada yang perlu diurus?</h2><p class="muted">Akses cepat untuk aktivitas magang Anda.</p></div></div><div class="quick-grid"><button data-new-request="izin">${navIcon('requests')}<strong>Izin / sakit</strong><span>Ajukan ketidakhadiran</span><b aria-hidden="true">↗</b></button><button data-new-request="susulan">${navIcon('attendance')}<strong>Absen susulan</strong><span>Lengkapi catatan presensi</span><b aria-hidden="true">↗</b></button></div></section>
+    </div>`;
+}
+
+async function participantAttendance() {
+    const today = await api('GET', 'attendance/today');
     state.today = today;
     const row = today.attendance;
-    return `<div class="stats">${stat('Total hadir', statistics.hadir ?? 0, 'Selama periode magang')}${stat('Izin disetujui', statistics.izin ?? 0, 'Pengajuan izin / sakit')}${stat('Status hari ini', row?.status ?? (today.hari_libur ? 'Libur' : 'Belum masuk'), dateLabel(today.tanggal))}${stat('Notifikasi baru', notifications.unread_count ?? 0, 'Keputusan & pengajuan')}</div>
+    return `<div class="attendance-heading"><h2>Lakukan Absensi</h2><p>Periksa lokasi dan catat kehadiran Anda.</p></div>
     <div class="columns"><section class="card"><div class="section-heading"><div><h2>Presensi hari ini</h2><p class="muted">${e(dateLabel(today.tanggal))} · Waktu server ${e(timeWib(today.waktu_server))} WIB</p></div>${badge(row?.status ?? 'belum')}</div><div class="punches"><div class="punch"><small>JAM MASUK</small><strong>${e(timeWib(row?.jam_masuk))}</strong><span>Batas tepat waktu 07:30 WIB</span></div><div class="punch"><small>JAM PULANG</small><strong>${e(timeWib(row?.jam_pulang))}</strong><span>Waktu kantor 16:00 WIB</span></div></div>
     ${today.block_reason ? `<div class="info-strip">${e(today.block_reason)}</div>` : '<p class="small-note">Aktifkan lokasi perangkat. Lokasi terbaru akan diambil saat Anda menekan tombol presensi.</p>'}
     <div class="actions"><button type="button" class="button primary" data-punch="check-in" ${today.can_check_in ? '' : 'disabled'}>Presensi masuk</button><button type="button" class="button subtle" data-punch="check-out" ${today.can_check_out ? '' : 'disabled'}>Presensi pulang</button></div>
@@ -229,8 +279,9 @@ async function adminHome() {
         all('admin/requests/izin', 'requests', { status: 'menunggu' }), all('admin/requests/izin', 'requests', { status: 'disetujui' }),
         all('admin/requests/susulan', 'requests', { status: 'menunggu' }), api('GET', 'notifications', { query: { limit: 1 } }),
     ]);
+    setNotificationCount(notifications.unread_count);
     const rows = dailyStatuses(f.date, participants, attendance, [...leaves, ...approvedLeaves], supplementary);
-    return `<div class="stats">${stat('Peserta magang', participants.length, 'Terdaftar di presensi')}${stat('Sudah masuk', rows.filter(r => r.attendance?.jam_masuk).length, dateLabel(f.date))}${stat('Izin / sakit', rows.filter(r => ['izin', 'sakit'].includes(r.status)).length, 'Pengajuan disetujui')}${stat('Notifikasi baru', notifications.unread_count ?? 0, 'Menunggu tindak lanjut')}</div><section class="card"><div class="section-heading"><div><h2>Kehadiran peserta</h2><p class="muted">Presensi dan status pengajuan pada tanggal pilihan.</p></div><button class="button primary" data-tab="requests">Tinjau pengajuan →</button></div><form class="filters" data-filter="home"><label>Tanggal<input type="date" name="date" required value="${e(f.date)}"></label><label>Cari peserta<input name="search" value="${e(f.search ?? '')}" placeholder="Nama peserta"></label><button type="submit" class="button subtle">Tampilkan</button></form>
+    return `<div class="stats">${stat('Peserta magang', participants.length, 'Terdaftar di presensi')}${stat('Sudah masuk', rows.filter(r => r.attendance?.jam_masuk).length, dateLabel(f.date))}${stat('Izin / sakit', rows.filter(r => ['izin', 'sakit'].includes(r.status)).length, 'Pengajuan disetujui')}${stat('Notifikasi baru', notifications.unread_count ?? 0, 'Menunggu tindak lanjut')}</div><section class="card"><div class="section-heading"><div><h2>Kehadiran peserta</h2><p class="muted">Presensi dan status pengajuan pada tanggal pilihan.</p></div><button class="button primary" data-tab="requests">Tinjau pengajuan →</button></div><form class="filters" data-filter="home"><label>Tanggal<input type="date" name="date" required value="${e(f.date)}"></label><label>Cari peserta<input name="search" value="${e(f.search ?? '')}" placeholder="Nama peserta"></label></form>
     ${table(['Peserta', 'Asal instansi', 'Status', 'Masuk WIB', 'Pulang WIB'], rows.filter(r => r.profile.nama_lengkap.toLowerCase().includes((f.search ?? '').toLowerCase())).map(r => [e(r.profile.nama_lengkap), e(r.profile.asal_instansi ?? '—'), badge(r.status, r.label), e(timeWib(r.attendance?.jam_masuk)), e(timeWib(r.attendance?.jam_pulang))]))}</section>`;
 }
 async function historyPage() {
@@ -240,32 +291,52 @@ async function historyPage() {
 }
 async function requestsPage() {
     const admin = state.user.role === 'admin';
-    const f = filterFor('requests', { kind: 'izin', status: admin ? 'menunggu' : '' });
-    const data = await api('GET', `${admin ? 'admin/' : ''}requests/${f.kind}`, { query: { status: f.status, limit: PAGE_SIZE, offset: offset('requests') } });
-    return `<section class="card"><div class="section-heading"><div><h2>${admin ? 'Persetujuan pengajuan' : 'Pengajuan saya'}</h2><p class="muted">${admin ? 'Periksa detail dan bukti sebelum memberikan keputusan.' : 'Pantau status izin, susulan, dan pembatalan jam pulang.'}</p></div>${admin ? '' : '<button class="button primary" data-new-request="izin">+ Buat pengajuan</button>'}</div>
-    <form class="filters" data-filter="requests"><label>Jenis pengajuan<select name="kind">${Object.entries(kinds).map(([key, label]) => `<option value="${key}" ${f.kind === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>Status<select name="status">${[...(!admin ? [['', 'Semua status']] : []), ['menunggu', 'Menunggu'], ['disetujui', 'Disetujui'], ['ditolak', 'Ditolak']].map(([key, label]) => `<option value="${key}" ${f.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><button type="submit" class="button subtle">Tampilkan</button></form>
-    ${!admin ? '<div class="actions" style="margin-bottom:22px"><button class="button subtle" data-new-request="izin">Izin / sakit</button><button class="button subtle" data-new-request="susulan">Absen susulan</button><button class="button subtle" data-new-request="pembatalan">Pembatalan pulang</button></div>' : ''}
-    <div class="list">${data.requests.length ? data.requests.map(row => requestCard(row, f.kind, admin)).join('') : empty('Tidak ada pengajuan dengan filter ini.')}</div>${pager('requests', data.requests.length)}</section>`;
+    if (state.selectedRequest) return requestDetail();
+    const f = filterFor('requests', { kind: 'izin', status: admin ? 'menunggu' : '', view: 'active' });
+    const history = f.view === 'history';
+    let rows;
+    let total;
+    if (history) {
+        const groups = await Promise.all((f.kind ? [f.kind] : Object.keys(kinds)).map(async kind => {
+            const statuses = f.status ? [f.status] : ['disetujui', 'ditolak'];
+            const requests = (await Promise.all(statuses.map(status => all(`${admin ? 'admin/' : ''}requests/${kind}`, 'requests', { status })))).flat();
+            return { kind, requests };
+        }));
+        const decisions = decisionHistory(groups, f);
+        total = decisions.length;
+        rows = decisions.slice(offset('requests'), offset('requests') + PAGE_SIZE);
+    } else {
+        const data = await api('GET', `${admin ? 'admin/' : ''}requests/${f.kind || 'izin'}`, { query: { status: f.status, limit: PAGE_SIZE, offset: offset('requests') } });
+        rows = data.requests.map(row => ({ ...row, kind: f.kind || 'izin' }));
+    }
+    const statuses = history ? [['', 'Semua keputusan'], ['disetujui', 'Disetujui'], ['ditolak', 'Ditolak']] : [['', 'Semua status'], ['menunggu', 'Menunggu'], ['disetujui', 'Disetujui'], ['ditolak', 'Ditolak']];
+    return `<section class="card"><div class="section-heading"><div><h2>${history ? 'Riwayat persetujuan' : admin ? 'Persetujuan pengajuan' : 'Pengajuan saya'}</h2><p class="muted">${history ? (admin ? 'Riwayat keputusan seluruh peserta, diurutkan dari yang terbaru.' : 'Riwayat keputusan untuk pengajuan Anda, diurutkan dari yang terbaru.') : admin ? 'Periksa detail dan bukti sebelum memberikan keputusan.' : 'Pantau status izin, susulan, dan pembatalan jam pulang.'}</p></div>${admin || history ? '' : '<div class="actions"><button class="button subtle" data-tab="files">Kelola bukti</button><button class="button primary" data-new-request="izin">+ Buat pengajuan</button></div>'}</div>
+    <div class="request-views" role="group" aria-label="Daftar pengajuan"><button type="button" class="button ${history ? 'subtle' : 'primary'}" data-request-view="active" aria-pressed="${!history}">${admin ? 'Kelola pengajuan' : 'Pengajuan saya'}</button><button type="button" class="button ${history ? 'primary' : 'subtle'}" data-request-view="history" aria-pressed="${history}">Riwayat persetujuan</button></div>
+    <form class="filters" data-filter="requests"><input type="hidden" name="view" value="${history ? 'history' : 'active'}"><label>Jenis pengajuan<select name="kind">${history ? `<option value="" ${!f.kind ? 'selected' : ''}>Semua jenis</option>` : ''}${Object.entries(kinds).map(([key, label]) => `<option value="${key}" ${f.kind === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${history ? 'Keputusan' : 'Status'}<select name="status">${statuses.map(([key, label]) => `<option value="${key}" ${f.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label></form>
+    ${!admin && !history ? '<div class="actions" style="margin-bottom:22px"><button class="button subtle" data-new-request="izin">Izin / sakit</button><button class="button subtle" data-new-request="susulan">Absen susulan</button><button class="button subtle" data-new-request="pembatalan">Pembatalan pulang</button></div>' : ''}
+    ${history ? `<p class="small-note">${total} keputusan ditemukan. Waktu ditampilkan dalam WIB.</p>` : ''}<div class="list">${rows.length ? rows.map(row => requestCard(row, row.kind, admin)).join('') : empty(history ? 'Belum ada keputusan persetujuan dengan filter ini.' : 'Tidak ada pengajuan dengan filter ini.')}</div>${pager('requests', rows.length)}</section>`;
 }
+
 function requestCard(row, kind, admin) {
     const label = kind === 'izin' ? (row.jenis === 'sakit' ? 'Sakit' : 'Izin') : kinds[kind];
     const period = kind === 'izin' ? `${dateLabel(row.tanggal_mulai)} – ${dateLabel(row.tanggal_selesai)}` : dateLabel(row.tanggal);
     return `<article class="request-card"><div class="request-top"><div><h3>${e(admin ? row.nama_lengkap : label)}</h3><small>${e(admin ? `${label} · ${period}` : period)}</small></div>${badge(row.status_persetujuan)}</div>
     ${kind === 'susulan' ? `<div class="request-meta"><span>Masuk: ${e(row.jam_masuk_diajukan ?? '—')} WIB</span><span>Pulang: ${e(row.jam_pulang_diajukan ?? '—')} WIB</span><span>${e(row.jenis_alasan)}</span></div>` : ''}
     ${kind === 'pembatalan' ? `<div class="request-meta"><span>Jam pulang: ${e(timeWib(row.jam_pulang_awal))} WIB</span></div>` : ''}
-    <p>${e(row.keterangan ?? row.alasan ?? '')}</p><div class="request-meta"><span>Diajukan ${e(datetimeLabel(row.created_at))}</span>${row.diproses_at ? `<span>Diproses ${e(datetimeLabel(row.diproses_at))}</span>` : ''}</div>
+    <p>${e(row.keterangan ?? row.alasan ?? '')}</p><div class="request-meta"><span>Diajukan ${e(datetimeLabel(row.created_at))}</span>${row.diproses_at ? `<span>Keputusan ${e(datetimeLabel(row.diproses_at))} WIB</span>` : ''}</div>
     ${row.alasan_penolakan ? `<div class="info-strip">Alasan penolakan: ${e(row.alasan_penolakan)}</div>` : ''}
-    ${proofLink(row)}${admin && row.status_persetujuan === 'menunggu' ? `<div class="actions" style="margin-top:14px"><button class="button success" data-decision="true" data-kind="${kind}" data-id="${e(row.id)}" data-name="${e(row.nama_lengkap)}">Setujui</button><button class="button danger" data-decision="false" data-kind="${kind}" data-id="${e(row.id)}" data-name="${e(row.nama_lengkap)}">Tolak</button></div>` : ''}</article>`;
+    <div class="request-proof">${proofLink(row)}</div>${admin && row.status_persetujuan === 'menunggu' ? `<div class="actions" style="margin-top:14px"><button class="button success" data-decision="true" data-kind="${kind}" data-id="${e(row.id)}" data-name="${e(row.nama_lengkap)}">Setujui</button><button class="button danger" data-decision="false" data-kind="${kind}" data-id="${e(row.id)}" data-name="${e(row.nama_lengkap)}">Tolak</button></div>` : ''}</article>`;
 }
 function proofLink(row) {
-    if (row.bukti_id) return `<button class="text-link" data-evidence="${e(row.bukti_id)}">Lihat bukti lampiran ↗</button>`;
+    if (row.bukti_id) return `<strong>Bukti pendukung</strong><button class="button subtle" data-inline-proof="${e(row.bukti_id)}" aria-expanded="false">Tampilkan bukti</button><div class="inline-proof" hidden></div>`;
     if (typeof row.bukti_url === 'string' && /^https:\/\//i.test(row.bukti_url)) return `<a class="text-link" href="${e(row.bukti_url)}" target="_blank" rel="noopener noreferrer">Lihat bukti lampiran ↗</a>`;
-    return '';
+    return '<span class="small-note">Tidak ada bukti terlampir.</span>';
 }
 async function notificationsPage() {
     const f = filterFor('notifications', { date: '', unread: '' });
     const data = await api('GET', 'notifications', { query: { ...f, limit: PAGE_SIZE, offset: offset('notifications') } });
-    return `<section class="card"><div class="section-heading"><h2>Notifikasi</h2><span class="badge hadir">${e(data.unread_count)} belum dibaca</span></div><form class="filters" data-filter="notifications"><label>Tanggal (opsional)<input type="date" name="date" value="${e(f.date)}"></label><label>Tampilkan<select name="unread"><option value="">Semua</option><option value="true" ${f.unread === 'true' ? 'selected' : ''}>Belum dibaca</option></select></label><button type="submit" class="button subtle">Tampilkan</button></form><div class="list">${data.notifications.length ? data.notifications.map(n => `<article class="notification ${n.read_at ? '' : 'unread'}"><div><h3>${e(n.title)}</h3><p>${e(datetimeLabel(n.created_at))}</p></div>${n.read_at ? badge('dibaca', 'Dibaca') : `<button class="button subtle" data-read="${e(n.id)}">Tandai dibaca</button>`}</article>`).join('') : empty('Belum ada notifikasi dengan filter ini.')}</div>${pager('notifications', data.notifications.length)}</section>`;
+    setNotificationCount(data.unread_count);
+    return `<section class="card"><div class="section-heading"><h2>Notifikasi</h2><span class="badge hadir">${e(data.unread_count)} belum dibaca</span></div><form class="filters" data-filter="notifications"><label>Tanggal (opsional)<input type="date" name="date" value="${e(f.date)}"></label><label>Tampilkan<select name="unread"><option value="">Semua</option><option value="true" ${f.unread === 'true' ? 'selected' : ''}>Belum dibaca</option></select></label></form><div class="list">${data.notifications.length ? data.notifications.map(notificationCard).join('') : empty('Belum ada notifikasi dengan filter ini.')}</div>${pager('notifications', data.notifications.length)}</section>`;
 }
 async function filesPage() {
     const data = await api('GET', 'files', { query: { limit: PAGE_SIZE, offset: offset('files') } });
@@ -274,10 +345,19 @@ async function filesPage() {
 async function holidaysPage() {
     const day = todayWib();
     const f = filterFor('holidays', { from: `${day.slice(0, 4)}-01-01`, to: `${day.slice(0, 4)}-12-31` });
-    const data = await api('GET', 'holidays', { query: { ...f, limit: PAGE_SIZE, offset: offset('holidays') } });
+    const [data, calendar] = await Promise.all([
+        api('GET', 'holidays', { query: { ...f, limit: PAGE_SIZE, offset: offset('holidays') } }),
+        fetch(`/presensi-assets/calendar-status.json?v=${Date.now()}`, { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null),
+    ]);
     const admin = state.user.role === 'admin';
-    return `<section class="card"><div class="section-heading"><h2>Kalender hari libur</h2>${admin ? '<button class="button primary" data-new-holiday>+ Tambah hari libur</button>' : ''}</div>${rangeFilter('holidays', f)}${table(['Tanggal', 'Keterangan', ...(admin ? ['Tindakan'] : [])], data.holidays.map(h => [e(dateLabel(h.tanggal)), e(h.keterangan), ...(admin ? [`<button class="button danger" data-delete-holiday="${e(h.id)}" data-name="${e(h.keterangan)}">Hapus</button>`] : [])]))}${pager('holidays', data.holidays.length)}<p class="small-note" style="margin-top:20px">Akhir pekan dan hari libur mengikuti aturan presensi pada aplikasi Android.</p></section>`;
+    const status = calendar?.years?.[f.from.slice(0, 4)];
+    const syncNote = status?.available ? `Terakhir berhasil disinkronkan ${datetimeLabel(status.checked_at)}. Pemeriksaan otomatis setiap jam.${calendar.ok === false ? ' Pemeriksaan terakhir terkendala; data terakhir tetap digunakan.' : ''}` : 'Data tahun ini belum tersedia dari sumber kalender. Hari libur khusus tetap dapat ditambahkan admin.';
+    return `<section class="card"><div class="section-heading"><div><h2>Kalender hari libur Indonesia</h2><p class="muted">Libur nasional, cuti bersama, dan hari libur khusus kantor.</p></div>${admin ? '<button class="button primary" data-new-holiday>+ Hari libur khusus</button>' : ''}</div><div class="info-strip"><strong>Tersinkron dengan presensi web dan Android</strong><p class="small-note">${e(syncNote)} Sumber: <a href="https://github.com/ahrulsyamil/indonesian-holidays" target="_blank" rel="noopener noreferrer">Kalender Indonesia berdasarkan SKB 3 Menteri</a>.</p></div>${rangeFilter('holidays', f)}${table(['Tanggal', 'Keterangan', 'Sumber', ...(admin ? ['Tindakan'] : [])], data.holidays.map(h => {
+        const automatic = h.keterangan.startsWith('[Kalender Indonesia] ');
+        return [e(dateLabel(h.tanggal)), e(h.keterangan.replace(/^\[Kalender Indonesia\] /, '')), automatic ? badge('hadir', 'Kalender Indonesia') : badge('izin', 'Khusus kantor'), ...(admin ? [automatic ? '<span class="small-note">Diperbarui otomatis</span>' : `<button class="button danger" data-delete-holiday="${e(h.id)}" data-name="${e(h.keterangan)}">Hapus</button>`] : [])];
+    }))}${pager('holidays', data.holidays.length)}<p class="small-note" style="margin-top:20px">Akhir pekan dan seluruh tanggal pada daftar ini mengikuti aturan PostgreSQL yang sama dengan aplikasi Android.</p></section>`;
 }
+
 async function usersPage() {
     const data = await api('GET', 'admin/participants', { query: { limit: PAGE_SIZE, offset: offset('users') } });
     return `<section class="card"><div class="section-heading"><h2>Peserta magang</h2></div>${table(['Nama lengkap', 'NIM', 'Asal instansi'], data.participants.map(p => [e(p.nama_lengkap), e(p.nim ?? '—'), e(p.asal_instansi ?? '—')]))}${pager('users', data.participants.length)}<p class="small-note" style="margin-top:20px">Daftar peserta mengikuti akun yang terdaftar pada layanan presensi.</p></section>`;
@@ -287,14 +367,15 @@ async function reportPage() {
     const f = filterFor('report', { period: day.slice(0, 7) });
     const [year, month] = f.period.split('-');
     const report = await api('GET', 'admin/rekap', { query: { month: Number(month), year: Number(year) } });
-    return `<section class="card"><div class="section-heading"><div><h2>Rekap presensi bulanan</h2><p class="muted">Dibuat ${e(datetimeLabel(report.generated_at))}</p></div><button class="button primary" data-download-report>Unduh Excel ↓</button></div><form class="filters" data-filter="report"><label>Periode<input type="month" name="period" min="2000-01" max="2100-12" value="${e(f.period)}" required></label><button class="button subtle" type="submit">Tampilkan</button></form>
+    return `<section class="card"><div class="section-heading"><div><h2>Rekap presensi bulanan</h2><p class="muted">Dibuat ${e(datetimeLabel(report.generated_at))}</p></div><button class="button primary" data-download-report>Unduh Excel ↓</button></div><form class="filters" data-filter="report"><label>Periode<input type="month" name="period" min="2000-01" max="2100-12" value="${e(f.period)}" required></label></form>
     ${table(['Nama peserta', 'Instansi', 'Hadir', 'Terlambat', 'Izin', 'Sakit', 'Dispensasi', 'Alpha', 'Tanpa catatan', 'Tidak lengkap', 'Total tercatat'], report.participants.map(p => [e(p.profile.nama_lengkap), e(p.profile.asal_instansi ?? '—'), e(p.counts.hadir), e(p.counts.terlambat), e(p.counts.izin), e(p.counts.sakit), e(p.counts.dispensasi), e(p.counts.alpha), e(p.counts.tanpa_catatan), e(p.counts.tidak_lengkap), `<strong>${e(p.counts.total)}</strong>`]))}
     <p class="small-note" style="margin-top:20px">Total hadir sudah mencakup keterlambatan. Akhir pekan, hari libur, dan tanggal mendatang tidak dihitung. Tanggal tanpa catatan tidak otomatis dianggap alpha.</p>
     <div class="report-details">${report.participants.map(p => `<details><summary>${e(p.profile.nama_lengkap)} · Detail harian</summary>${table(['Tanggal', 'Status', 'Masuk WIB', 'Pulang WIB', 'Dihitung', 'Catatan'], p.days.map(d => [e(dateLabel(d.tanggal)), e(d.status), e(d.jam_masuk), e(d.jam_pulang), d.dihitung ? 'Ya' : 'Tidak', e(d.catatan)]))}</details>`).join('')}</div></section>`;
 }
 async function profilePage() {
     const { user } = await api('GET', 'me'); state.user = user;
-    return `<div class="columns equal"><section class="card"><h2>Profil saya</h2><p class="muted">Perubahan profil juga akan terlihat di Android.</p><form data-action="profile"><label>Nama lengkap<input name="nama_lengkap" maxlength="150" value="${e(user.nama_lengkap)}" required></label><label>Email<input value="${e(user.email)}" type="email" disabled></label><label>NIM<input name="nim" maxlength="200" value="${e(user.nim)}"></label><label>Asal instansi<input name="asal_instansi" maxlength="200" value="${e(user.asal_instansi)}"></label><label>Nomor HP<input name="no_hp" type="tel" maxlength="200" value="${e(user.no_hp)}"></label><button class="button primary" type="submit">Simpan profil</button></form></section><section class="card"><h2>${user.has_password === false ? 'Buat kata sandi' : 'Ganti kata sandi'}</h2><p class="muted">${user.has_password === false ? 'Buat kata sandi agar akun Google ini juga dapat digunakan untuk masuk ke aplikasi Android. Untuk keamanan, lakukan setelah baru masuk dengan Google.' : 'Setelah diubah, seluruh sesi web dan Android akan berakhir. Masuk kembali menggunakan kata sandi baru.'}</p><form data-action="password">${user.has_password === false ? '' : '<label>Kata sandi saat ini<input name="current_password" type="password" autocomplete="current-password" required maxlength="256"></label>'}<label>Kata sandi baru<input name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required></label><label>Ulangi kata sandi baru<input name="confirmation" type="password" autocomplete="new-password" required maxlength="256"></label><button class="button primary" type="submit">${user.has_password === false ? 'Buat kata sandi' : 'Ubah kata sandi'}</button></form></section></div>`;
+    const admin = user.role === 'admin';
+    return `<div class="columns equal"><section class="card"><h2>${admin ? 'Profil administrator' : 'Profil saya'}</h2><p class="muted">${admin ? 'Kelola identitas dan kontak administrator Presensi Magang BPS Kota Batu.' : 'Perubahan profil juga akan terlihat di Android.'}</p><form data-action="profile"><label>Nama lengkap<input name="nama_lengkap" maxlength="150" value="${e(user.nama_lengkap)}" required></label><label>Email<input value="${e(user.email)}" type="email" disabled></label>${admin ? '<label>Peran akun<input value="Administrator" disabled></label>' : `<label>NIM<input name="nim" maxlength="200" value="${e(user.nim)}"></label>`}<label>${admin ? 'Unit kerja / instansi' : 'Asal instansi'}<input name="asal_instansi" maxlength="200" value="${e(user.asal_instansi)}" placeholder="${admin ? 'Contoh: BPS Kota Batu' : ''}"></label><label>${admin ? 'Nomor kontak' : 'Nomor HP'}<input name="no_hp" type="tel" maxlength="200" value="${e(user.no_hp)}"></label><button class="button primary" type="submit">Simpan profil</button></form></section><section class="card"><h2>${user.has_password === false ? 'Buat kata sandi' : 'Ganti kata sandi'}</h2><p class="muted">${user.has_password === false ? (admin ? 'Buat kata sandi untuk mengamankan akses administrator. Lakukan setelah baru masuk dengan Google.' : 'Buat kata sandi agar akun Google ini juga dapat digunakan untuk masuk ke aplikasi Android. Untuk keamanan, lakukan setelah baru masuk dengan Google.') : 'Setelah diubah, seluruh sesi web dan Android akan berakhir. Masuk kembali menggunakan kata sandi baru.'}</p><form data-action="password">${user.has_password === false ? '' : '<label>Kata sandi saat ini<input name="current_password" type="password" autocomplete="current-password" required maxlength="256"></label>'}<label>Kata sandi baru<input name="new_password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required></label><label>Ulangi kata sandi baru<input name="confirmation" type="password" autocomplete="new-password" required maxlength="256"></label><button class="button primary" type="submit">${user.has_password === false ? 'Buat kata sandi' : 'Ubah kata sandi'}</button></form></section></div>`;
 }
 
 function openModal(title, html) {
@@ -393,6 +474,8 @@ async function run(element, callback) {
 }
 
 document.addEventListener('click', event => {
+    const popup = $('#notification-popover');
+    if (popup && !popup.hidden && !popup.contains(event.target) && !event.target.closest('#header-notification')) closeNotifications();
     const menu = $('#account-menu');
     if (menu.open && !menu.contains(event.target)) menu.open = false;
     const button = event.target.closest('button'); if (!button) return;
@@ -407,11 +490,20 @@ document.addEventListener('click', event => {
     if (button.id === 'close-modal') { if (!state.busy) closeModal(); return; }
     if (button.hasAttribute('data-location-cancel')) { locationController?.abort(); return; }
     if (state.busy) return;
-    if (button.dataset.tab) { state.tab = button.dataset.tab; notify(''); renderTab(); return; }
+    if (button.id === 'header-notification' && state.user?.role === 'admin') { toggleNotifications(); return; }
+    if (button.hasAttribute('data-close-notifications')) { closeNotifications(); return; }
+    if (button.dataset.openRequest) { run(button, () => openRequestNotification(button)); return; }
+    if (button.hasAttribute('data-request-back')) { state.selectedRequest = null; renderTab(); return; }
+    if (button.dataset.inlineProof) { run(button, () => inlineProof(button)); return; }
+    if (button.dataset.tab) { closeNotifications(); state.selectedRequest = null; state.tab = button.dataset.tab; notify(''); renderTab(); return; }
     if (button.dataset.page) { state.pages[button.dataset.page] = Math.max(0, (state.pages[button.dataset.page] ?? 0) + Number(button.dataset.direction)); renderTab(); return; }
     if (button.id === 'refresh') { run(button, () => renderTab()); return; }
     if (button.id === 'logout') {
         run(button, async () => { await api('POST', 'auth/logout'); showAuth(); notify('Anda telah keluar dari presensi.'); }); return;
+    }
+    if (button.dataset.requestView) {
+        state.filters.requests = { view: button.dataset.requestView, kind: button.dataset.requestView === 'history' ? '' : 'izin', status: button.dataset.requestView === 'history' ? '' : state.user.role === 'admin' ? 'menunggu' : '' };
+        state.pages.requests = 0; state.selectedRequest = null; renderTab(); return;
     }
     if (button.dataset.newRequest) { run(button, () => newRequest(button.dataset.newRequest)); return; }
     if (button.dataset.decision) { decisionModal(button); return; }
@@ -420,7 +512,7 @@ document.addEventListener('click', event => {
     if (button.hasAttribute('data-locate')) {
         run(button, () => locationPoint()); return;
     }
-    if (button.dataset.read) { run(button, async () => { await api('PATCH', 'notifications/read', { body: { ids: [button.dataset.read] } }); await renderTab(); }); return; }
+    if (button.dataset.read) { run(button, async () => { await api('PATCH', 'notifications/read', { body: { ids: [button.dataset.read] } }); await renderTab(); await pollNotifications(); }); return; }
     if (button.hasAttribute('data-download-report')) { run(button, downloadReport); return; }
     if (button.hasAttribute('data-new-holiday')) {
         openModal('Tambah hari libur', '<form data-action="holiday"><label>Tanggal<input type="date" name="tanggal" required></label><label>Keterangan<input name="keterangan" maxlength="200" required></label><p class="form-error" data-modal-error role="alert" hidden></p><button type="submit" class="button primary wide">Simpan hari libur</button></form>'); return;
@@ -429,6 +521,7 @@ document.addEventListener('click', event => {
 });
 
 document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeNotifications();
     if (event.key === 'Escape' && $('#account-menu').open) {
         $('#account-menu').open = false;
         $('#account-menu summary').focus();
@@ -456,10 +549,11 @@ document.addEventListener('submit', event => {
         }); return;
     }
     if (form.dataset.filter) {
+        if (!form.checkValidity()) return;
         if (state.busy) return;
         const values = Object.fromEntries(new FormData(form));
         if (values.from && values.to && values.from > values.to) { notify('Tanggal akhir tidak boleh sebelum tanggal awal.', true); return; }
-        state.filters[form.dataset.filter] = values; state.pages[form.dataset.filter] = 0; notify(''); renderTab(); return;
+        state.filters[form.dataset.filter] = values; state.pages[form.dataset.filter] = 0; notify(''); renderTab({ silent: true }); return;
     }
     if (!form.dataset.action) return;
     run(form, async () => {
@@ -502,6 +596,89 @@ async function checkService() {
     try { await api('GET', 'ready'); $('#service-status').textContent = '● Layanan presensi tersedia'; $('#service-status').classList.remove('offline'); }
     catch { $('#service-status').textContent = 'Layanan presensi belum terhubung. Silakan coba lagi nanti.'; $('#service-status').classList.add('offline'); }
 }
+const seenNotifications = new Set();
+const proofUrls = new Set();
+let notificationLoading = false;
+let filterTimer;
+function closeNotifications() {
+    const panel = $('#notification-popover');
+    if (panel) panel.hidden = true;
+    $('#header-notification').setAttribute('aria-expanded', 'false');
+}
+function notificationCard(n) {
+    const target = kinds[n.jenis] && n.request_id;
+    return `<article class="notification ${n.read_at ? '' : 'unread'}"><div><h3>${e(n.title)}</h3><p>${e(datetimeLabel(n.created_at))}</p>${target ? `<button class="text-link" data-open-request="${e(n.request_id)}" data-kind="${e(n.jenis)}" data-notice-id="${e(n.id)}">${e(kinds[n.jenis])} · Lihat pengajuan →</button>` : ''}</div>${n.read_at ? badge('dibaca', 'Dibaca') : `<button class="button subtle" data-read="${e(n.id)}">Tandai dibaca</button>`}</article>`;
+}
+async function pollNotifications(forceOpen = false) {
+    if (!state.user || notificationLoading) return;
+    notificationLoading = true;
+    const session = state.session;
+    try {
+        const data = await api('GET', 'notifications', { query: { limit: 10 } });
+        if (session !== state.session || !state.user) return;
+        setNotificationCount(data.unread_count);
+        $('#notification-items').innerHTML = data.notifications.map(notificationCard).join('') || empty('Belum ada notifikasi.');
+        const fresh = data.notifications.some(n => !n.read_at && !seenNotifications.has(String(n.id)));
+        data.notifications.forEach(n => seenNotifications.add(String(n.id)));
+        if (forceOpen || (fresh && state.user.role === 'admin' && !$('#modal').open)) {
+            $('#notification-popover').hidden = false;
+            $('#header-notification').setAttribute('aria-expanded', 'true');
+        }
+    } finally { notificationLoading = false; }
+}
+function toggleNotifications() {
+    if (!$('#notification-popover').hidden) { closeNotifications(); return; }
+    pollNotifications(true).catch(error => notify(error.message, true));
+}
+async function openRequestNotification(button) {
+    if (!kinds[button.dataset.kind]) return;
+    closeNotifications();
+    state.selectedRequest = { id: button.dataset.openRequest, kind: button.dataset.kind };
+    state.tab = 'requests';
+    await renderTab();
+    if (button.dataset.noticeId) {
+        await api('PATCH', 'notifications/read', { body: { ids: [button.dataset.noticeId] } });
+        await pollNotifications();
+    }
+}
+async function requestDetail() {
+    const { id, kind } = state.selectedRequest;
+    const admin = state.user.role === 'admin';
+    let row;
+    for (let offset = 0; ; offset += 100) {
+        const data = await api('GET', `${admin ? 'admin/' : ''}requests/${kind}`, { query: { limit: 100, offset } });
+        row = data.requests.find(r => String(r.id) === String(id));
+        if (row || data.requests.length < 100) break;
+    }
+    return `<section class="card"><button class="text-link" data-request-back>← Semua pengajuan</button><h2 style="margin-top:20px">Detail ${e(kinds[kind].toLowerCase())}</h2>${row ? requestCard(row, kind, admin) : empty('Pengajuan tidak ditemukan atau sudah tidak tersedia.')}</section>`;
+}
+function clearProofs() { proofUrls.forEach(url => URL.revokeObjectURL(url)); proofUrls.clear(); }
+async function inlineProof(button) {
+    const container = button.parentElement.querySelector('.inline-proof');
+    if (!container.hidden) { container.hidden = true; button.setAttribute('aria-expanded', 'false'); button.textContent = 'Tampilkan bukti'; return; }
+    if (!container.childElementCount) {
+        const blob = await api('GET', `files/${button.dataset.inlineProof}`, { binary: true });
+        if (!button.isConnected) return;
+        const url = URL.createObjectURL(blob); proofUrls.add(url);
+        container.innerHTML = `<img src="${url}" alt="Bukti pendukung pengajuan"><a class="text-link" href="${url}" download="bukti-presensi">Unduh bukti ↓</a>`;
+    }
+    container.hidden = false; button.setAttribute('aria-expanded', 'true'); button.textContent = 'Sembunyikan bukti';
+}
+function applyFilter(form) {
+    if (!form?.isConnected || !form.checkValidity() || state.busy) return;
+    form.requestSubmit();
+}
+document.addEventListener('change', event => {
+    const form = event.target.closest('form[data-filter]');
+    if (form) { clearTimeout(filterTimer); applyFilter(form); }
+});
+document.addEventListener('input', event => {
+    const form = event.target.closest('form[data-filter]');
+    if (!form || !['text', 'search'].includes(event.target.type)) return;
+    clearTimeout(filterTimer);
+    filterTimer = setTimeout(() => applyFilter(form), 450);
+});
+
 async function init() {
     try { const { user } = await api('GET', 'me'); await showWorkspace(user); }
     catch (error) { showAuth(document.body.dataset.authMode === 'register' ? 'register' : 'login'); if (error.status !== 401) notify(error.message, true); }
@@ -509,7 +686,8 @@ async function init() {
 }
 setInterval(() => {
     if (document.hidden || state.busy || $('#modal').open || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-    if (state.user && ['home', 'notifications'].includes(state.tab)) renderTab({ silent: true });
+    if (state.user?.role === 'admin') pollNotifications().catch(() => {});
+    if (state.user && ['home', 'attendance', 'notifications'].includes(state.tab)) renderTab({ silent: true });
     else if (!state.user) checkService();
 }, 30000);
 window.addEventListener('online', () => { if (state.user && !state.busy && !$('#modal').open) renderTab({ silent: true }); else if (!state.user) checkService(); });

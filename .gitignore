@@ -32,3 +32,6 @@ Thumbs.db
 /database/*.sqlite*
 /storage/app/private/*
 !/storage/app/private/.gitignore
+
+/public/presensi-assets/calendar-status.json
+/public/presensi-assets/calendar-status.json.tmp

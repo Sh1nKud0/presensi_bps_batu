@@ -5,20 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="referrer" content="{{ in_array(request()->getHost(), ['localhost', '127.0.0.1']) ? 'no-referrer-when-downgrade' : 'strict-origin-when-cross-origin' }}">
+    <link rel="icon" type="image/png" href="{{ asset('images/logo-bps.png') }}?v={{ filemtime(public_path('images/logo-bps.png')) }}">
+    <link rel="apple-touch-icon" href="{{ asset('images/logo-bps.png') }}">
     <title>Presensi Magang | BPS Kota Batu</title>
     <link rel="stylesheet" href="{{ asset('presensi-assets/app.css') }}?v={{ filemtime(public_path('presensi-assets/app.css')) }}">
     <link rel="stylesheet" href="{{ asset('presensi-assets/auth.css') }}?v={{ filemtime(public_path('presensi-assets/auth.css')) }}">
+    <link rel="stylesheet" href="{{ asset('presensi-assets/workspace.css') }}?v={{ filemtime(public_path('presensi-assets/workspace.css')) }}">
     <script type="module" src="{{ asset('presensi-assets/app.js') }}?v={{ filemtime(public_path('presensi-assets/app.js')) }}"></script>
 </head>
 <body class="presensi-page auth-screen" data-auth-mode="{{ $authMode }}" data-local-test="{{ config('presensi.local_test') ? 'true' : 'false' }}">
     <header class="topbar presensi-topbar">
-        <a href="{{ $presensiHome }}" class="brand"><img src="{{ asset('images/logo-bps.png') }}" alt="Logo BPS"><span><strong>Presensi<span class="brand-accent">.</span></strong><small>BADAN PUSAT STATISTIK KOTA BATU</small></span></a>
+        <a href="{{ $presensiHome }}" class="brand"><img src="{{ asset('images/logo-bps.png') }}" alt="Logo BPS"><span><strong>Presensi Magang</strong><small>BADAN PUSAT STATISTIK KOTA BATU</small></span></a>
         <span class="header-label" id="header-label"><span class="status-dot"></span>Sistem Presensi Magang</span>
+        <div class="header-actions" id="header-actions" hidden>
+        <button type="button" class="header-notification" id="header-notification" data-tab="notifications" aria-label="Notifikasi" title="Notifikasi"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 20h4"/></svg><span class="notification-dot" id="header-notification-dot" hidden></span></button>
         <details class="account-menu" id="account-menu" hidden>
             <summary class="account-trigger"><span class="account-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/></svg></span><span>Akun</span><svg class="account-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m5 8 5 5 5-5"/></svg></summary>
             <div class="account-popover"><div class="account-info"><span>Akun presensi</span><strong id="account-name"></strong><span class="role-tag" id="role-tag"></span></div><button type="button" id="logout" class="account-logout"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10"/></svg>Keluar</button></div>
         </details>
+        </div>
     </header>
+    <section id="notification-popover" class="notification-popover" aria-label="Notifikasi terbaru" hidden><div class="section-heading"><h2>Notifikasi terbaru</h2><button class="icon-button" data-close-notifications aria-label="Tutup notifikasi">×</button></div><div id="notification-items"></div><button class="button subtle wide" data-tab="notifications">Lihat semua notifikasi</button></section>
     <main>
         @if (config('presensi.local_test'))
             <p class="local-test-banner" role="note">Mode uji lokal. Data pada halaman ini terpisah dari Android dan hosting.</p>
@@ -60,13 +67,13 @@
         <section id="workspace" hidden>
             <div class="workspace-heading"><div><span class="eyebrow">PRESENSI BPS KOTA BATU</span><h1 id="greeting">Selamat datang</h1><p class="muted" id="workspace-subtitle">Kelola kehadiran dan aktivitas magang Anda.</p></div></div>
             <div class="sync-line"><span class="status-dot"></span><span id="sync-status" role="status" aria-live="polite">{{ config('presensi.local_test') ? 'Data uji disimpan di komputer ini.' : 'Data mengikuti akun presensi Android Anda.' }}</span><button type="button" class="refresh-link" id="refresh"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M5.5 9a7 7 0 0 1 12-2L20 12M4 12l2.5 5a7 7 0 0 0 12-2"/></svg>Perbarui</button></div>
-            <nav id="tabs" class="tabs" aria-label="Menu presensi"></nav>
+            <aside class="workspace-sidebar"><div class="sidebar-caption">RUANG MAGANG</div><nav id="tabs" class="tabs" aria-label="Menu presensi"></nav></aside>
             <div id="content" aria-live="polite"></div>
         </section>
         <div id="loading" class="loading-panel" role="status"><span class="spinner"></span>Menyiapkan presensi…</div>
         <noscript><p class="card">Aktifkan JavaScript untuk menggunakan presensi.</p></noscript>
     </main>
-    <footer class="page-footer"><span>© {{ date('Y') }} BPS Kota Batu. Sistem Presensi Magang.</span><span>Dibuat untuk setiap langkah perjalanan magangmu.</span></footer>
+    <footer class="page-footer"><span>© {{ date('Y') }} BPS Kota Batu. Sistem Presensi Magang.</span></footer>
     <dialog id="modal"><div class="modal-heading"><h2 id="modal-title"></h2><button type="button" id="close-modal" class="icon-button" aria-label="Tutup">×</button></div><div id="modal-body"></div></dialog>
 </body>
 </html>

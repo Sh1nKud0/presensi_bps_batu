@@ -9,5 +9,5 @@ export function dashboardSummary(today, now = new Date()) {
     const available = !today.block_reason && !done && Boolean(today.can_check_in || today.can_check_out);
     return { attendance, minutes, hours: Math.floor(minutes / 60), remainingMinutes: minutes % 60,
         complete: minutes >= 480, done, available,
-        action: done ? 'Presensi sudah lengkap' : !available ? 'Presensi tidak tersedia' : attendance?.jam_masuk ? 'Absen Pulang' : 'Absen Sekarang' };
+        action: done ? 'Presensi sudah lengkap' : !available ? 'Presensi tidak tersedia' : attendance?.jam_masuk ? 'Presensi Pulang' : 'Presensi Sekarang' };
 }

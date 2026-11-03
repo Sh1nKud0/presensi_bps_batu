@@ -4,7 +4,7 @@ import { dashboardSummary } from '../public/presensi-assets/dashboard.js';
 
 test('belum masuk menawarkan absen sekarang', () => {
     const result = dashboardSummary({ attendance: null, can_check_in: true, can_check_out: false });
-    assert.equal(result.action, 'Absen Sekarang');
+    assert.equal(result.action, 'Presensi Sekarang');
     assert.equal(result.minutes, 0);
     assert.equal(result.available, true);
 });
@@ -19,7 +19,7 @@ test('jam kerja dihitung dari masuk sampai pulang', () => {
 test('belum pulang memakai waktu sekarang dan menghormati blokir backend', () => {
     const now = new Date('2026-11-02T02:15:00Z');
     const today = { attendance: { jam_masuk: '2026-11-02T00:00:00Z' }, can_check_out: true };
-    assert.equal(dashboardSummary(today, now).action, 'Absen Pulang');
+    assert.equal(dashboardSummary(today, now).action, 'Presensi Pulang');
     assert.equal(dashboardSummary(today, now).minutes, 135);
     assert.equal(dashboardSummary({ ...today, block_reason: 'Izin' }, now).available, false);
 });

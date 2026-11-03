@@ -1,5 +1,6 @@
+import { monthRange, moveMonth, attendanceCalendar } from './attendance-calendar.js?v=20261103';
 import { decisionHistory } from './request-history.js?v=20261103';
-import { dashboardSummary } from './dashboard.js?v=20261102';
+import { dashboardSummary } from './dashboard.js?v=20261103-presensi';
 import { escapeHtml as e, todayWib, timeWib, dateLabel, datetimeLabel, shiftDay, distanceMeters, dailyStatuses, OFFICE_LOCATION } from './domain.js?v=20261029-gps170-r1';
 import { collectLocation, validateAttendancePoint } from './location.js?v=20261029-gps170-r1';
 
@@ -9,7 +10,7 @@ const PAGE_SIZE = 25;
 const navIcons = {"home":"M3 10 12 3l9 7v11h-6v-7H9v7H3Z","attendance":"M8 3H5v18h14V3h-3M9 3h6v4H9ZM8 13l3 3 5-5","history":"M3 12a9 9 0 1 0 3-7M3 3v6h6M12 7v5l3 2","requests":"M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h5","files":"M8 12l6-6a3 3 0 0 1 4 4l-8 8a4 4 0 0 1-6-6l8-8","holidays":"M3 6h18v15H3ZM7 3v6M17 3v6M3 11h18M8 15h2M14 15h2","profile":"M5 21v-2a7 7 0 0 1 14 0v2M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8","users":"M3 21v-2a6 6 0 0 1 12 0v2M9 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8M17 4a4 4 0 0 1 0 8M18 15a5 5 0 0 1 3 5","report":"M4 3h16v18H4ZM8 17v-4M12 17V7M16 17v-7"};
 function navIcon(key) { return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="'+(navIcons[key] || navIcons.home)+'"/></svg>'; }
 const localTest = document.body.dataset.localTest === 'true';
-const kinds = { izin: 'Izin / sakit', susulan: 'Absen susulan', pembatalan: 'Pembatalan pulang' };
+const kinds = { izin: 'Izin / sakit', susulan: 'Presensi susulan', pembatalan: 'Pembatalan pulang' };
 const spinner = '<div class="loading-panel"><span class="spinner"></span>Memuat data terbaru…</div>';
 let modalCleanup = () => {};
 let googleEpoch = 0;
@@ -74,7 +75,7 @@ async function all(path, key, query = {}) {
 function showAuth(mode = 'login') {
     state.user = null; state.session++; state.epoch++;
     state.filters = {}; state.pages = {}; state.selectedRequest = null; seenNotifications.clear(); closeNotifications(); clearProofs();
-    delete state.locationPoint;
+    delete state.locationPoint; delete state.historyCalendar; delete state.historyRecords; delete state.attendancePane;
     $('#workspace').hidden = true; $('#auth').hidden = false; $('#loading').hidden = true;
     $('#account-menu').open = false; $('#account-menu').hidden = true; $('#header-actions').hidden = true; $('#header-label').hidden = false; setNotificationCount(0);
     document.body.classList.add('auth-screen');
@@ -121,7 +122,7 @@ function showWorkspace(user) {
     $('#workspace-subtitle').textContent = user.role === 'admin' ? 'Pantau kehadiran dan kelola pengajuan peserta magang.' : 'Siap untuk mulai berkarya hari ini?';
     const tabs = user.role === 'admin'
         ? [['home', 'Ringkasan'], ['requests', 'Persetujuan'], ['report', 'Rekap presensi'], ['users', 'Peserta'], ['holidays', 'Hari libur'], ['profile', 'Profil']]
-        : [['home', 'Beranda'], ['attendance', 'Absen'], ['history', 'Riwayat'], ['requests', 'Pengajuan'], ['holidays', 'Hari libur'], ['profile', 'Profil']];
+        : [['home', 'Beranda'], ['attendance', 'Presensi'], ['requests', 'Pengajuan'], ['profile', 'Profil']];
     $('#tabs').innerHTML = tabs.map(([tab, title]) => `<button type="button" data-tab="${tab}">${navIcon(tab)}<span>${title}</span></button>`).join('');
     const rendered = renderTab();
     pollNotifications().catch(() => {});
@@ -209,7 +210,7 @@ async function renderTab({ silent = false } = {}) {
     document.querySelectorAll('[data-tab]').forEach(button => { const active = button.dataset.tab === state.tab; button.classList.toggle('active', active); button.setAttribute('aria-current', active ? 'page' : 'false'); });
     if (!silent) $('#content').innerHTML = spinner;
     try {
-        const renderers = { home: state.user.role === 'admin' ? adminHome : participantHome, attendance: participantAttendance, history: historyPage, requests: requestsPage, report: reportPage, users: usersPage, holidays: holidaysPage, notifications: notificationsPage, files: filesPage, profile: profilePage };
+        const renderers = { home: state.user.role === 'admin' ? adminHome : participantHome, attendance: participantAttendance, requests: requestsPage, report: reportPage, users: usersPage, holidays: holidaysPage, notifications: notificationsPage, files: filesPage, profile: profilePage };
         const html = await renderers[state.tab]();
         if (epoch !== state.epoch || !state.user) return;
         const focused = document.activeElement;
@@ -252,25 +253,43 @@ async function participantHome() {
         </div></section>
         <button type="button" class="mobile-attendance-button" data-tab="attendance" ${summary.available ? '' : 'disabled'}><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 0 1 16 0M7 11a5 5 0 1 1 10 0c0 4-.4 7-2 10M10 20c1-2 1-5 1-9a1 1 0 1 1 2 0c0 4 0 6-.6 9M5 13c0 2 0 4-1 6m15-6c0 2 0 4-.5 6"/></svg>${e(summary.action)}</button>
         ${today.block_reason ? `<p class="mobile-block-reason">${e(today.block_reason)}</p>` : ''}
-        ${canCancel(row, today.tanggal) ? '<button type="button" class="mobile-cancel" data-new-request="pembatalan">Ajukan Pembatalan Absen Pulang</button>' : ''}
-        ${reminder ? '<div class="mobile-reminder"><strong>Anda belum absen hari ini!</strong><span>Segera lakukan presensi. Jika ada kendala, ajukan Absen Susulan.</span></div>' : ''}
+        ${canCancel(row, today.tanggal) ? '<button type="button" class="mobile-cancel" data-new-request="pembatalan">Ajukan Pembatalan Presensi Pulang</button>' : ''}
+        ${reminder ? '<div class="mobile-reminder"><strong>Anda belum presensi hari ini!</strong><span>Segera lakukan presensi. Jika ada kendala, ajukan Presensi Susulan.</span></div>' : ''}
         ${summary.complete ? '<div class="mobile-target">Target jam kerja hari ini sudah tercapai (8 jam+).</div>' : ''}
-</div><aside class="home-secondary"><section class="day-guide"><span class="eyebrow">RITME HARI KERJA</span><h2>Hari yang terencana.</h2><p>Jangan lewatkan waktu presensi Anda.</p><div class="schedule-row"><span class="schedule-dot"></span><div><strong>07:30 <small>WIB</small></strong><span>Batas masuk tepat waktu</span></div></div><div class="schedule-row"><span class="schedule-dot blue"></span><div><strong>16:00 <small>WIB</small></strong><span>Waktu pulang kantor</span></div></div><div class="guide-foot">${navIcon('attendance')}<span>Periksa lokasi sebelum mencatat kehadiran.</span></div></section><button class="history-shortcut" data-tab="history">${navIcon('history')}<span><strong>Perjalanan magangmu</strong><small>Lihat riwayat kehadiran</small></span><span aria-hidden="true">→</span></button></aside></div><section class="quick-section"><div class="section-heading"><div><h2>Ada yang perlu diurus?</h2><p class="muted">Akses cepat untuk aktivitas magang Anda.</p></div></div><div class="quick-grid"><button data-new-request="izin">${navIcon('requests')}<strong>Izin / sakit</strong><span>Ajukan ketidakhadiran</span><b aria-hidden="true">↗</b></button><button data-new-request="susulan">${navIcon('attendance')}<strong>Absen susulan</strong><span>Lengkapi catatan presensi</span><b aria-hidden="true">↗</b></button></div></section>
+</div><aside class="home-secondary"><section class="day-guide"><span class="eyebrow">RITME HARI KERJA</span><h2>Hari yang terencana.</h2><p>Jangan lewatkan waktu presensi Anda.</p><div class="schedule-row"><span class="schedule-dot"></span><div><strong>07:30 <small>WIB</small></strong><span>Batas masuk tepat waktu</span></div></div><div class="schedule-row"><span class="schedule-dot blue"></span><div><strong>16:00 <small>WIB</small></strong><span>Waktu pulang kantor</span></div></div><div class="guide-foot">${navIcon('attendance')}<span>Periksa lokasi sebelum mencatat kehadiran.</span></div></section><button class="history-shortcut" data-tab="attendance">${navIcon('history')}<span><strong>Perjalanan magangmu</strong><small>Kalender dan riwayat presensi</small></span><span aria-hidden="true">→</span></button></aside></div><section class="quick-section"><div class="section-heading"><div><h2>Ada yang perlu diurus?</h2><p class="muted">Akses cepat untuk aktivitas magang Anda.</p></div></div><div class="quick-grid"><button data-new-request="izin">${navIcon('requests')}<strong>Izin / sakit</strong><span>Ajukan ketidakhadiran</span><b aria-hidden="true">↗</b></button><button data-new-request="susulan">${navIcon('attendance')}<strong>Presensi susulan</strong><span>Lengkapi catatan presensi</span><b aria-hidden="true">↗</b></button></div></section>
     </div>`;
 }
 
 async function participantAttendance() {
-    const today = await api('GET', 'attendance/today');
+    const [today, calendar] = await Promise.all([
+        api('GET', 'attendance/today'),
+        attendanceHistory().catch(() => '<section class="card"><h2>Kalender presensi</h2><p class="muted">Kalender belum dapat dimuat. Tekan Perbarui untuk mencoba kembali.</p></section>'),
+    ]);
     state.today = today;
     const row = today.attendance;
-    return `<div class="attendance-heading"><h2>Lakukan Absensi</h2><p>Periksa lokasi dan catat kehadiran Anda.</p></div>
-    <div class="columns"><section class="card"><div class="section-heading"><div><h2>Presensi hari ini</h2><p class="muted">${e(dateLabel(today.tanggal))} · Waktu server ${e(timeWib(today.waktu_server))} WIB</p></div>${badge(row?.status ?? 'belum')}</div><div class="punches"><div class="punch"><small>JAM MASUK</small><strong>${e(timeWib(row?.jam_masuk))}</strong><span>Batas tepat waktu 07:30 WIB</span></div><div class="punch"><small>JAM PULANG</small><strong>${e(timeWib(row?.jam_pulang))}</strong><span>Waktu kantor 16:00 WIB</span></div></div>
-    ${today.block_reason ? `<div class="info-strip">${e(today.block_reason)}</div>` : '<p class="small-note">Aktifkan lokasi perangkat. Lokasi terbaru akan diambil saat Anda menekan tombol presensi.</p>'}
+    const selected = state.historyCalendar?.days.find(d => d.date === state.filters.history?.selected);
+    return `<div class="presensi-pane-switch" role="group" aria-label="Tampilan presensi"><button class="button" data-presensi-pane="calendar" aria-pressed="${state.attendancePane !== 'today'}">Kalender</button><button class="button" data-presensi-pane="today" aria-pressed="${state.attendancePane === 'today'}">Presensi &amp; detail</button></div>
+    <div class="presensi-workbench" data-pane="${state.attendancePane === 'today' ? 'today' : 'calendar'}"><div class="presensi-calendar-pane">${calendar}</div><section class="card presensi-today-pane"><div class="section-heading"><div><h2>Presensi hari ini</h2><p class="muted">${e(dateLabel(today.tanggal))} · ${e(timeWib(today.waktu_server))} WIB</p></div>${badge(row?.status ?? 'belum')}</div>
+    <div class="punches"><div class="punch"><small>JAM MASUK</small><strong>${e(timeWib(row?.jam_masuk))}</strong><span>Batas 07:30 WIB</span></div><div class="punch"><small>JAM PULANG</small><strong>${e(timeWib(row?.jam_pulang))}</strong><span>Waktu kantor 16:00 WIB</span></div></div>
+    ${today.block_reason ? `<div class="info-strip">${e(today.block_reason)}</div>` : '<p class="small-note">Lokasi terbaru diperiksa saat Anda menekan tombol presensi.</p>'}
     <div class="actions"><button type="button" class="button primary" data-punch="check-in" ${today.can_check_in ? '' : 'disabled'}>Presensi masuk</button><button type="button" class="button subtle" data-punch="check-out" ${today.can_check_out ? '' : 'disabled'}>Presensi pulang</button></div>
-    ${canCancel(row, today.tanggal) ? '<button type="button" class="text-link" data-new-request="pembatalan">Ajukan pembatalan jam pulang</button>' : ''}</section>
-    <section class="card"><div class="section-heading"><h2>Lokasi kantor</h2><span class="badge hadir">Radius 100 m</span></div><iframe class="map" title="Titik kantor BPS Kota Batu" loading="lazy" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=112.5033%2C-7.8708%2C112.5113%2C-7.8628&layer=mapnik&marker=-7.8668%2C112.5073"></iframe><p class="small-note map-caption">Penanda hijau menunjukkan titik kantor BPS. Posisi perangkat diperiksa melalui tombol di bawah.</p><div class="location-detail"><div><strong>Lokasi perangkat</strong><span id="location-result" role="status" aria-live="polite">Belum diperiksa. Akurasi yang diterima maksimal ${OFFICE_LOCATION.maxAccuracy} meter.</span></div><button type="button" class="button subtle" data-locate>Cek lokasi</button></div><div id="location-reading" class="location-reading" hidden><span id="location-coordinates"></span><a id="device-location-link" target="_blank" rel="noopener noreferrer">Lihat titik perangkat di peta</a></div><button type="button" class="text-link" data-location-cancel hidden>Batalkan pencarian lokasi</button><details class="location-help"><summary>Lokasi laptop kurang presisi?</summary><p>Aktifkan layanan lokasi pada Windows dan izinkan situs ini mengakses lokasi. Nyalakan Wi-Fi dan coba dekat jendela atau area terbuka. Laptop dapat memakai perkiraan jaringan; HP dengan GPS biasanya lebih presisi. Presensi melalui Android tetap terlihat di web.</p></details></section></div>
-    <section class="card" style="margin-top:24px"><div class="section-heading"><h2>Perlu mengajukan sesuatu?</h2><span class="muted">Diproses oleh admin</span></div><div class="actions"><button class="button subtle" data-new-request="izin">Izin / sakit</button><button class="button subtle" data-new-request="susulan">Absen susulan</button><button class="button subtle" data-tab="requests">Lihat pengajuan saya →</button></div></section>`;
+    ${canCancel(row, today.tanggal) ? '<button type="button" class="text-link" data-new-request="pembatalan">Ajukan pembatalan jam pulang</button>' : ''}
+    <div class="compact-location"><div class="location-detail"><div><strong>Lokasi perangkat</strong><span id="location-result" role="status" aria-live="polite">Belum diperiksa · radius kantor 100 m.</span></div><button type="button" class="button subtle" data-locate>Cek lokasi</button></div><div id="location-reading" class="location-reading" hidden><span id="location-coordinates"></span><a id="device-location-link" target="_blank" rel="noopener noreferrer">Lihat titik perangkat</a></div><button type="button" class="text-link" data-location-cancel hidden>Batalkan pencarian lokasi</button><div class="compact-location-links"><button type="button" class="text-link" data-office-map>Peta kantor &amp; bantuan GPS</button><span class="small-note">Akurasi maks. ${OFFICE_LOCATION.maxAccuracy} m</span></div></div>
+    <div class="compact-requests"><button class="text-link" data-new-request="izin">Izin / sakit</button><button class="text-link" data-new-request="susulan">Presensi susulan</button><button class="text-link" data-tab="requests">Pengajuan saya →</button></div>
+    <div id="history-day-detail" class="compact-day-detail" aria-live="polite">${compactHistoryDayDetail(selected)}</div></section></div>`;
 }
+function compactHistoryDayDetail(day) {
+    if (!day) return '<p class="small-note">Pilih tanggal pada kalender untuk melihat detail.</p>';
+    const holiday = day.holiday?.keterangan?.replace(/^\[Kalender Indonesia\] /, '');
+    return `<div class="section-heading"><div><small>TANGGAL DIPILIH</small><strong>${e(dateLabel(day.date))}</strong></div><button type="button" class="text-link" data-history-detail="${day.date}">Lihat detail</button></div><div class="compact-day-status">${badge(day.status, day.label)}${holiday || day.weekend ? `<span>${e(holiday || 'Libur akhir pekan')}</span>` : ''}${day.attendance?.jam_masuk ? `<span>Masuk ${e(timeWib(day.attendance.jam_masuk))} · Pulang ${e(timeWib(day.attendance.jam_pulang))} WIB</span>` : ''}</div>`;
+}
+function setPresensiPane(pane) {
+    state.attendancePane = pane;
+    const workbench = $('.presensi-workbench');
+    if (workbench) workbench.dataset.pane = pane;
+    document.querySelectorAll('[data-presensi-pane]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.presensiPane === pane)));
+}
+
 function canCancel(row, day) { return row?.jam_pulang && row.tanggal.slice(0, 10) === day && ['hadir', 'terlambat'].includes(row.status) && timeWib(row.jam_pulang) < '16:00'; }
 async function adminHome() {
     const f = filterFor('home', { date: todayWib() });
@@ -284,11 +303,38 @@ async function adminHome() {
     return `<div class="stats">${stat('Peserta magang', participants.length, 'Terdaftar di presensi')}${stat('Sudah masuk', rows.filter(r => r.attendance?.jam_masuk).length, dateLabel(f.date))}${stat('Izin / sakit', rows.filter(r => ['izin', 'sakit'].includes(r.status)).length, 'Pengajuan disetujui')}${stat('Notifikasi baru', notifications.unread_count ?? 0, 'Menunggu tindak lanjut')}</div><section class="card"><div class="section-heading"><div><h2>Kehadiran peserta</h2><p class="muted">Presensi dan status pengajuan pada tanggal pilihan.</p></div><button class="button primary" data-tab="requests">Tinjau pengajuan →</button></div><form class="filters" data-filter="home"><label>Tanggal<input type="date" name="date" required value="${e(f.date)}"></label><label>Cari peserta<input name="search" value="${e(f.search ?? '')}" placeholder="Nama peserta"></label></form>
     ${table(['Peserta', 'Asal instansi', 'Status', 'Masuk WIB', 'Pulang WIB'], rows.filter(r => r.profile.nama_lengkap.toLowerCase().includes((f.search ?? '').toLowerCase())).map(r => [e(r.profile.nama_lengkap), e(r.profile.asal_instansi ?? '—'), badge(r.status, r.label), e(timeWib(r.attendance?.jam_masuk)), e(timeWib(r.attendance?.jam_pulang))]))}</section>`;
 }
-async function historyPage() {
-    const f = filterFor('history', { from: shiftDay(todayWib(), -30), to: todayWib() });
-    const data = await api('GET', 'attendance/history', { query: { ...f, limit: PAGE_SIZE, offset: offset('history') } });
-    return `<section class="card"><div class="section-heading"><h2>Riwayat presensi</h2><span class="muted">Seluruh waktu dalam WIB</span></div>${rangeFilter('history', f)}${table(['Tanggal', 'Masuk', 'Pulang', 'Status', 'Jarak kantor'], data.attendance.map(r => [e(dateLabel(r.tanggal)), e(timeWib(r.jam_masuk)), e(timeWib(r.jam_pulang)), badge(r.status), r.jarak_dari_kantor_meter == null ? '—' : `${e(Math.round(r.jarak_dari_kantor_meter))} m`]))}${pager('history', data.attendance.length)}</section>`;
+async function attendanceHistory() {
+    const today = todayWib();
+    const f = filterFor('history', { period: today.slice(0, 7), selected: today });
+    const range = monthRange(f.period);
+    const [attendance, leaves, holidays] = await Promise.all([
+        all('attendance/history', 'attendance', { from: range.from, to: range.to }),
+        all('requests/izin', 'requests', { status: 'disetujui' }),
+        all('holidays', 'holidays', { from: range.from, to: range.to }),
+    ]);
+    const calendar = attendanceCalendar(f.period, attendance, leaves, holidays);
+    state.historyCalendar = calendar;
+    if (!calendar.days.some(d => d.date === f.selected)) f.selected = today.startsWith(f.period) ? today : range.from;
+    const title = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(new Date(`${range.from}T12:00:00+07:00`));
+    state.historyRecords = attendance;
+    return `<div class="history-calendar-page"><section class="calendar-period" aria-label="Periode riwayat"><button type="button" class="calendar-arrow" data-history-month="-1" aria-label="Bulan sebelumnya" ${f.period === '2000-01' ? 'disabled' : ''}>‹</button><div><span>PERIODE MAGANG</span><h3>${e(title)}</h3></div><button type="button" class="calendar-arrow" data-history-month="1" aria-label="Bulan berikutnya" ${f.period === '2100-12' ? 'disabled' : ''}>›</button></section>
+    <section class="attendance-calendar card" aria-label="Kalender ${e(title)}"><div class="calendar-weekdays">${['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map((label, i) => `<span class="${i > 4 ? 'weekend-label' : ''}">${label}</span>`).join('')}</div><div class="calendar-dates" role="group" aria-label="Tanggal presensi">${'<span class="calendar-blank" aria-hidden="true"></span>'.repeat(calendar.leading)}${calendar.days.map(d => `<button type="button" data-history-day="${d.date}" class="calendar-day ${d.weekend ? 'is-weekend' : ''} ${d.holiday ? 'is-holiday' : ''} ${d.date === f.selected ? 'is-selected' : ''}" aria-pressed="${d.date === f.selected}" ${d.date === today ? 'aria-current="date"' : ''} aria-label="${e(`${dateLabel(d.date)}, ${d.label}${d.holiday ? ', '+d.holiday.keterangan.replace(/^\[Kalender Indonesia\] /, '') : d.weekend ? ', Akhir pekan' : ''}`)}"><span>${d.day}</span><i class="calendar-dot status-${d.status}" aria-hidden="true"></i>${d.holiday ? '<i class="holiday-dot" aria-hidden="true"></i>' : ''}</button>`).join('')}</div>
+    <div class="calendar-legend">${[['hadir','Hadir'],['terlambat','Terlambat'],['izin','Izin/Sakit'],['dispensasi','Dispensasi'],['holiday','Libur Nasional']].map(([status,label]) => `<span><i class="calendar-dot status-${status}"></i>${label}</span>`).join('')}<span class="weekend-label">Sab/Min Libur</span></div></section>
+    <div class="calendar-summary">${[['hadir','Total Hadir','Hari','attendance'],['terlambat','Terlambat','Kali','history'],['izin','Izin/Sakit','Hari','requests'],['libur','Hari Libur','Hari','holidays']].map(([key,label,unit,icon]) => `<div class="calendar-stat stat-${key}"><span class="calendar-stat-icon">${navIcon(icon)}</span><div><h3>${label}</h3><strong>${calendar.stats[key]} <small>${unit}</small></strong></div></div>`).join('')}</div>
+    <button type="button" class="text-link calendar-ledger-link" data-history-ledger>Daftar catatan bulan ini →</button></div>`;
 }
+function historyDayDetail(day) {
+    if (!day) return empty('Pilih tanggal untuk melihat catatan presensi.');
+    const row = day.attendance;
+    const holiday = day.holiday?.keterangan?.replace(/^\[Kalender Indonesia\] /, '');
+    return `<span class="eyebrow">DETAIL HARIAN</span><h2>${e(dateLabel(day.date))}</h2>${day.status === 'belum' ? '<span class="badge">Belum ada catatan</span>' : badge(day.status, day.label)}
+    ${holiday || day.weekend ? `<div class="calendar-holiday-note">${e(holiday || 'Libur akhir pekan (Sabtu/Minggu)')}</div>` : ''}
+    <div class="punches"><div class="punch"><small>JAM MASUK</small><strong>${e(timeWib(row?.jam_masuk))}</strong></div><div class="punch"><small>JAM PULANG</small><strong>${e(timeWib(row?.jam_pulang))}</strong></div></div>
+    ${row?.jarak_dari_kantor_meter != null ? `<p class="small-note">Jarak dari kantor: ${e(Math.round(row.jarak_dari_kantor_meter))} meter.</p>` : ''}
+    ${day.leave && ['izin', 'sakit'].includes(day.status) ? `<div class="info-strip"><strong>${day.status === 'sakit' ? 'Sakit' : 'Izin'} disetujui</strong><p>${e(day.leave.keterangan || '')}</p><span class="small-note">${e(dateLabel(day.leave.tanggal_mulai))} – ${e(dateLabel(day.leave.tanggal_selesai))}</span></div>` : ''}
+    ${day.status === 'belum' ? `<p class="small-note">${day.date > todayWib() ? 'Tanggal ini belum berlangsung.' : 'Tidak ada catatan presensi pada tanggal ini.'}</p>` : ''}<p class="small-note">Seluruh waktu ditampilkan dalam WIB.</p>`;
+}
+
 async function requestsPage() {
     const admin = state.user.role === 'admin';
     if (state.selectedRequest) return requestDetail();
@@ -313,7 +359,7 @@ async function requestsPage() {
     return `<section class="card"><div class="section-heading"><div><h2>${history ? 'Riwayat persetujuan' : admin ? 'Persetujuan pengajuan' : 'Pengajuan saya'}</h2><p class="muted">${history ? (admin ? 'Riwayat keputusan seluruh peserta, diurutkan dari yang terbaru.' : 'Riwayat keputusan untuk pengajuan Anda, diurutkan dari yang terbaru.') : admin ? 'Periksa detail dan bukti sebelum memberikan keputusan.' : 'Pantau status izin, susulan, dan pembatalan jam pulang.'}</p></div>${admin || history ? '' : '<div class="actions"><button class="button subtle" data-tab="files">Kelola bukti</button><button class="button primary" data-new-request="izin">+ Buat pengajuan</button></div>'}</div>
     <div class="request-views" role="group" aria-label="Daftar pengajuan"><button type="button" class="button ${history ? 'subtle' : 'primary'}" data-request-view="active" aria-pressed="${!history}">${admin ? 'Kelola pengajuan' : 'Pengajuan saya'}</button><button type="button" class="button ${history ? 'primary' : 'subtle'}" data-request-view="history" aria-pressed="${history}">Riwayat persetujuan</button></div>
     <form class="filters" data-filter="requests"><input type="hidden" name="view" value="${history ? 'history' : 'active'}"><label>Jenis pengajuan<select name="kind">${history ? `<option value="" ${!f.kind ? 'selected' : ''}>Semua jenis</option>` : ''}${Object.entries(kinds).map(([key, label]) => `<option value="${key}" ${f.kind === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label><label>${history ? 'Keputusan' : 'Status'}<select name="status">${statuses.map(([key, label]) => `<option value="${key}" ${f.status === key ? 'selected' : ''}>${label}</option>`).join('')}</select></label></form>
-    ${!admin && !history ? '<div class="actions" style="margin-bottom:22px"><button class="button subtle" data-new-request="izin">Izin / sakit</button><button class="button subtle" data-new-request="susulan">Absen susulan</button><button class="button subtle" data-new-request="pembatalan">Pembatalan pulang</button></div>' : ''}
+    ${!admin && !history ? '<div class="actions" style="margin-bottom:22px"><button class="button subtle" data-new-request="izin">Izin / sakit</button><button class="button subtle" data-new-request="susulan">Presensi susulan</button><button class="button subtle" data-new-request="pembatalan">Pembatalan pulang</button></div>' : ''}
     ${history ? `<p class="small-note">${total} keputusan ditemukan. Waktu ditampilkan dalam WIB.</p>` : ''}<div class="list">${rows.length ? rows.map(row => requestCard(row, row.kind, admin)).join('') : empty(history ? 'Belum ada keputusan persetujuan dengan filter ini.' : 'Tidak ada pengajuan dengan filter ini.')}</div>${pager('requests', rows.length)}</section>`;
 }
 
@@ -500,6 +546,29 @@ document.addEventListener('click', event => {
     if (button.id === 'refresh') { run(button, () => renderTab()); return; }
     if (button.id === 'logout') {
         run(button, async () => { await api('POST', 'auth/logout'); showAuth(); notify('Anda telah keluar dari presensi.'); }); return;
+    }
+    if (button.dataset.presensiPane) { setPresensiPane(button.dataset.presensiPane); return; }
+    if (button.dataset.historyDetail) {
+        const day = state.historyCalendar?.days.find(d => d.date === button.dataset.historyDetail);
+        openModal('Detail presensi', historyDayDetail(day)); return;
+    }
+    if (button.hasAttribute('data-history-ledger')) {
+        openModal('Catatan presensi bulanan', table(['Tanggal', 'Masuk', 'Pulang', 'Status', 'Jarak kantor'], (state.historyRecords ?? []).map(r => [e(dateLabel(r.tanggal)), e(timeWib(r.jam_masuk)), e(timeWib(r.jam_pulang)), badge(r.status), r.jarak_dari_kantor_meter == null ? '—' : e(Math.round(r.jarak_dari_kantor_meter))+' m']))); return;
+    }
+    if (button.hasAttribute('data-office-map')) {
+        openModal('Lokasi kantor & bantuan GPS', '<iframe class="map" title="Titik kantor BPS Kota Batu" referrerpolicy="no-referrer" src="https://www.openstreetmap.org/export/embed.html?bbox=112.5033%2C-7.8708%2C112.5113%2C-7.8628&layer=mapnik&marker=-7.8668%2C112.5073"></iframe><p class="small-note">Penanda menunjukkan kantor BPS Kota Batu. Radius presensi 100 meter. Posisi perangkat diperiksa saat menekan Cek lokasi atau tombol presensi.</p><h3>Lokasi laptop kurang presisi?</h3><p class="small-note">Aktifkan layanan lokasi Windows, izinkan lokasi di browser, dan nyalakan Wi-Fi. HP dengan GPS biasanya lebih presisi. Presensi Android tetap terlihat di web.</p>'); return;
+    }
+    if (button.dataset.historyMonth) {
+        const f = filterFor('history', { period: todayWib().slice(0, 7) });
+        f.period = moveMonth(f.period, Number(button.dataset.historyMonth)); f.selected = null;
+        renderTab(); return;
+    }
+    if (button.dataset.historyDay) {
+        const day = state.historyCalendar?.days.find(d => d.date === button.dataset.historyDay);
+        if (!day) return;
+        state.filters.history.selected = day.date;
+        document.querySelectorAll('[data-history-day]').forEach(item => { const selected = item.dataset.historyDay === day.date; item.classList.toggle('is-selected', selected); item.setAttribute('aria-pressed', String(selected)); });
+        $('#history-day-detail').innerHTML = compactHistoryDayDetail(day); setPresensiPane('today'); return;
     }
     if (button.dataset.requestView) {
         state.filters.requests = { view: button.dataset.requestView, kind: button.dataset.requestView === 'history' ? '' : 'izin', status: button.dataset.requestView === 'history' ? '' : state.user.role === 'admin' ? 'menunggu' : '' };

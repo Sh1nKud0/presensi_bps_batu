@@ -11,6 +11,8 @@
     <link rel="stylesheet" href="{{ asset('presensi-assets/app.css') }}?v={{ filemtime(public_path('presensi-assets/app.css')) }}">
     <link rel="stylesheet" href="{{ asset('presensi-assets/auth.css') }}?v={{ filemtime(public_path('presensi-assets/auth.css')) }}">
     <link rel="stylesheet" href="{{ asset('presensi-assets/workspace.css') }}?v={{ filemtime(public_path('presensi-assets/workspace.css')) }}">
+    <link rel="stylesheet" href="{{ asset('presensi-assets/vendor/leaflet/leaflet.css') }}?v=1.9.4">
+    <link rel="stylesheet" href="{{ asset('presensi-assets/android-flow.css') }}?v={{ filemtime(public_path('presensi-assets/android-flow.css')) }}">
     <script type="module" src="{{ asset('presensi-assets/app.js') }}?v={{ filemtime(public_path('presensi-assets/app.js')) }}"></script>
 </head>
 <body class="presensi-page auth-screen" data-auth-mode="{{ $authMode }}" data-local-test="{{ config('presensi.local_test') ? 'true' : 'false' }}">
